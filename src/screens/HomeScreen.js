@@ -860,7 +860,6 @@ export default function HomeScreen({ navigation }) {
                 styles.searchWrapper,
                 {
                   width: "100%",
-                  borderColor: searchBorderColor,
                 }
               ]}>
                 {suggestLoading
@@ -878,11 +877,9 @@ export default function HomeScreen({ navigation }) {
                   style={[styles.searchInput, { paddingVertical: 0 }]}
                   returnKeyType="search"
                   onFocus={() => {
-                    onSearchFocus();
                     if (suggestions.length > 0) setShowSuggestions(true);
                   }}
                   onBlur={() => {
-                    onSearchBlur();
                     setTimeout(() => setShowSuggestions(false), 150);
                   }}
                   onSubmitEditing={() => { searchAnime(query.trim()); setShowSuggestions(false); setMobileMenuOpen(false); }}

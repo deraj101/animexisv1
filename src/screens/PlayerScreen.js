@@ -12,8 +12,7 @@ import {
   Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useVideoPlayer, VideoView } from "expo-video";
-import { useEventListener } from "expo"; // expo-video events can also be consumed via useEventListener from expo or the player object
+import { Video } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
@@ -157,17 +156,12 @@ function AdOverlay({ onAdFinished }) {
   const ad = ADS[0];
   const [countdown, setCountdown] = useState(ad.skipAfter);
   const [canSkip,   setCanSkip]   = useState(false);
-  const [adLoading, setAdLoading] = useState(true);
+  const [adLoading, setAdLoading] = useState(false);
   const [adError,   setAdError]   = useState(false);
   const [timeLeft,  setTimeLeft]  = useState(null);
   const skipAnim = useRef(new Animated.Value(0)).current;
+  const adRef    = useRef(null);
 
-  // Initialize expo-video player
-  const player = useVideoPlayer(ad.url, (p) => {
-    p.play();
-  });
-
-  // Handle countdown with local timer (consistent with previous logic)
   useEffect(() => {
     if (countdown <= 0) {
       setCanSkip(true);
@@ -178,29 +172,8 @@ function AdOverlay({ onAdFinished }) {
     return () => clearTimeout(t);
   }, [countdown]);
 
-  // Use new event listeners for expo-video
-  useEventListener(player, 'timeUpdate', (event) => {
-    setAdLoading(false);
-    if (event.duration > 0) {
-      setTimeLeft(Math.max(0, Math.ceil(event.duration - event.currentTime)));
-    }
-  });
-
-  useEventListener(player, 'playToEnd', () => {
-    onAdFinished();
-  });
-
-  const handleSkip = useCallback(() => { 
-    if (canSkip) {
-      player.pause();
-      onAdFinished();
-    }
-  }, [canSkip, onAdFinished, player]);
-
-  const handleAdError = useCallback(() => { 
-    setAdLoading(false); 
-    setAdError(true); 
-  }, []);
+  const handleSkip    = useCallback(() => { if (canSkip) onAdFinished(); }, [canSkip, onAdFinished]);
+  const handleAdError = useCallback(() => { setAdLoading(false); setAdError(true); }, []);
 
   const renderOverlayUI = () => (
     <>
@@ -242,14 +215,18 @@ function AdOverlay({ onAdFinished }) {
       <View style={adStyles.container}>
         {!adError && (
           <video
+            ref={adRef}
             src={ad.url}
             autoPlay
             playsInline
             style={{ width: "100%", height: "100%", objectFit: "contain", backgroundColor: "#000" }}
             onLoadStart={() => setAdLoading(false)}
             onCanPlay={() => setAdLoading(false)}
+            onLoadedMetadata={() => setAdLoading(false)}
+            onLoadedData={() => setAdLoading(false)}
             onTimeUpdate={(e) => {
               const v = e.target;
+              setAdLoading(false);
               if (!isNaN(v.duration)) setTimeLeft(Math.max(0, Math.ceil(v.duration - v.currentTime)));
             }}
             onEnded={onAdFinished}
@@ -264,11 +241,24 @@ function AdOverlay({ onAdFinished }) {
   return (
     <View style={adStyles.container}>
       {!adError && (
-        <VideoView
-          player={player}
+        <Video
+          ref={adRef}
+          source={{ uri: ad.url }}
           style={StyleSheet.absoluteFill}
-          contentFit="contain"
-          nativeControls={false}
+          resizeMode="contain"
+          shouldPlay
+          useNativeControls={false}
+          onLoad={(status) => {
+            setAdLoading(false);
+            if (status.durationMillis) setTimeLeft(Math.ceil(status.durationMillis / 1000));
+          }}
+          onPlaybackStatusUpdate={(status) => {
+            if (status.durationMillis && status.positionMillis) {
+              setTimeLeft(Math.max(0, Math.ceil((status.durationMillis - status.positionMillis) / 1000)));
+            }
+            if (status.didJustFinish) onAdFinished();
+          }}
+          onError={handleAdError}
         />
       )}
       {renderOverlayUI()}
@@ -332,11 +322,7 @@ export default function PlayerScreen({ route, navigation }) {
   // Controls visibility state
   const [controlsVisible, setControlsVisible] = useState(false);
 
-  // Initialize main expo-video player
-  const player = useVideoPlayer(videoUrl, (p) => {
-    p.loop = false;
-  });
-
+  const videoRef       = useRef(null);
   const cardAnim       = useRef(new Animated.Value(0)).current;
   const cardScale      = useRef(new Animated.Value(0.93)).current;
   const controlsAnim   = useRef(new Animated.Value(0)).current;
@@ -425,54 +411,7 @@ export default function PlayerScreen({ route, navigation }) {
     pickAndLoadSource();
     // Show controls initially for 3s so user sees title & close button
     showControls();
-  }, [pickAndLoadSource]);
-
-  // Sync player play/pause state with showAd and playerLoading
-  useEffect(() => {
-    if (!showAd && !playerLoading && !error && videoUrl) {
-      player.play();
-    } else {
-      player.pause();
-    }
-  }, [showAd, playerLoading, error, videoUrl]);
-
-  // Handle finished threshold and cleanup
-  useEventListener(player, 'timeUpdate', (status) => {
-    if (status.duration > 0) {
-      // 🏁 Threshold: Trigger cleanup if reached 98% OR within last 20 seconds
-      const isNearlyFinished = 
-        status.currentTime >= status.duration * 0.98 || 
-        (status.duration - status.currentTime) < 20;
-
-      if (isNearlyFinished && !wasFinishedRef.current) {
-        wasFinishedRef.current = true;
-        console.log("[Player] Episode finished (threshold reached). Cleaning up...");
-        if (user?.email && animeId) {
-          API.delete("/api/anime/continue-watching", {
-            data: { email: user.email, animeId }
-          }).catch(() => {});
-        }
-      }
-    }
-  });
-
-  useEventListener(player, 'playToEnd', () => {
-    if (!wasFinishedRef.current) {
-      wasFinishedRef.current = true;
-      console.log("[Player] Episode finished completely. Cleaning up...");
-      if (user?.email && animeId) {
-        API.delete("/api/anime/continue-watching", {
-          data: { email: user.email, animeId }
-        }).catch(() => {});
-      }
-    }
-  });
-
-  // Track player loading
-  useEventListener(player, 'statusChange', ({ status }) => {
-     if (status === 'readyToPlay') setPlayerLoading(false);
-     if (status === 'loading') setPlayerLoading(true);
-  });
+  }, []);
 
   const [showComments, setShowComments] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
@@ -666,13 +605,33 @@ export default function PlayerScreen({ route, navigation }) {
             />
           )
         ) : videoUrl ? (
-          <VideoView
-            player={player}
+          <Video
+            ref={videoRef}
+            source={{ uri: videoUrl }}
             style={styles.video}
-            allowsFullscreen
-            allowsPictureInPicture
-            contentFit="contain"
-            nativeControls
+            useNativeControls
+            resizeMode="contain"
+            onLoad={() => setPlayerLoading(false)}
+            onPlaybackStatusUpdate={(status) => {
+              if (status.isLoaded && status.durationMillis > 0) {
+                // 🏁 Threshold: Trigger cleanup if reached 98% OR within last 20 seconds
+                const isNearlyFinished = 
+                  status.positionMillis >= status.durationMillis * 0.98 || 
+                  (status.durationMillis - status.positionMillis) < 20000;
+
+                if ((status.didJustFinish || isNearlyFinished) && !wasFinishedRef.current) {
+                  wasFinishedRef.current = true;
+                  console.log("[Player] Episode finished (threshold reached). Cleaning up...");
+                  if (user?.email && animeId) {
+                    API.delete("/api/anime/continue-watching", {
+                      data: { email: user.email, animeId }
+                    }).catch(() => {});
+                  }
+                }
+              }
+            }}
+            onError={handleVideoError}
+            shouldPlay={!showAd}
           />
         ) : (
           <View style={styles.preparingBox}>
