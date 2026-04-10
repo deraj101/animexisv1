@@ -296,28 +296,10 @@ export default function DetailsScreen({ route, navigation }) {
     );
   }
 
-  if (!anime) return null;
-
-  const formatDate = (d) => {
-    if (!d?.year) return null;
-    return d.month && d.day
-      ? `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`
-      : String(d.year);
-  };
-  const startDate = anime.startDate ? formatDate(anime.startDate) : null;
-  const endDate   = anime.endDate   ? formatDate(anime.endDate)   : null;
-  const aired     = startDate ? (endDate ? `${startDate} → ${endDate}` : startDate) : anime.released;
-  
-  // New Metadata Helpers
-  const studios = Array.isArray(anime.studios) ? anime.studios.map(s => s.name || s).join(", ") : anime.studios;
-  const producers = Array.isArray(anime.producers) ? anime.producers.map(p => p.name || p).join(", ") : anime.producers;
-  const premiered = anime.season ? `${anime.season} ${anime.year || ""}` : (anime.premiered || null);
-  const duration = anime.duration || (anime.episodeDuration ? `${anime.episodeDuration} min` : null);
-
-  // ── EPISODE RANGES ──
+  // ── EPISODE RANGES (Moved before conditional return to satisfy Rules of Hooks) ──
   const CHUNK_SIZE = 50;
   const episodeRanges = useMemo(() => {
-    if (!episodes.length) return [];
+    if (!episodes || !episodes.length) return [];
     const ranges = [];
     for (let i = 0; i < episodes.length; i += CHUNK_SIZE) {
       const start = episodes[i].number;
@@ -336,6 +318,24 @@ export default function DetailsScreen({ route, navigation }) {
     const found = episodeRanges.find(r => r.index === activeRange) || episodeRanges[0];
     return isReversed ? [...found.data].reverse() : found.data;
   }, [episodeRanges, activeRange, isReversed]);
+
+  if (!anime) return null;
+
+  const formatDate = (d) => {
+    if (!d?.year) return null;
+    return d.month && d.day
+      ? `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`
+      : String(d.year);
+  };
+  const startDate = anime.startDate ? formatDate(anime.startDate) : null;
+  const endDate   = anime.endDate   ? formatDate(anime.endDate)   : null;
+  const aired     = startDate ? (endDate ? `${startDate} → ${endDate}` : startDate) : anime.released;
+  
+  // New Metadata Helpers
+  const studios = Array.isArray(anime.studios) ? anime.studios.map(s => s.name || s).join(", ") : anime.studios;
+  const producers = Array.isArray(anime.producers) ? anime.producers.map(p => p.name || p).join(", ") : anime.producers;
+  const premiered = anime.season ? `${anime.season} ${anime.year || ""}` : (anime.premiered || null);
+  const duration = anime.duration || (anime.episodeDuration ? `${anime.episodeDuration} min` : null);
 
   const posterUrl = anime.image  || "https://placehold.co/300x450/111115/DC143C?text=No+Image";
   const bannerUrl = anime.banner || posterUrl;
