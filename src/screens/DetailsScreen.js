@@ -62,18 +62,21 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isAc
         activeOpacity={1}
       >
         {isActive && <View style={styles.episodeCardGlow} />}
-        <View style={styles.episodeInfo}>
+        
+        <View style={styles.episodeLeft}>
           <Text style={[styles.episodeNumber, isActive && styles.episodeNumberActive]}>
-            EP {item.displayNumber || item.number}
+            {item.number}
           </Text>
-          {item.title && (
-            <Text style={[styles.episodeTitle, isActive && styles.episodeTitleActive]} numberOfLines={2}>
-              {item.title}
-            </Text>
-          )}
         </View>
+
+        <View style={styles.episodeMain}>
+          <Text style={[styles.episodeTitle, isActive && styles.episodeTitleActive]} numberOfLines={2}>
+            {item.title || `Episode ${item.number}`}
+          </Text>
+        </View>
+
         <View style={[styles.episodePlayIcon, isActive && styles.episodePlayIconActive]}>
-          <Ionicons name="play" size={13} color="white" />
+          <Ionicons name={isActive ? "pause" : "play"} size={14} color="white" />
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -119,6 +122,8 @@ export default function DetailsScreen({ route, navigation }) {
   const [favorited,     setFavorited] = useState(false);
   const [userRating,    setUserRating]= useState(0);
   const [favLoading,    setFavLoading]= useState(false);
+  const [isReversed,    setIsReversed]= useState(false);
+  const [activeRange,   setActiveRange] = useState(0); 
 
   const fadeIn  = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(30)).current;
@@ -308,6 +313,29 @@ export default function DetailsScreen({ route, navigation }) {
   const producers = Array.isArray(anime.producers) ? anime.producers.map(p => p.name || p).join(", ") : anime.producers;
   const premiered = anime.season ? `${anime.season} ${anime.year || ""}` : (anime.premiered || null);
   const duration = anime.duration || (anime.episodeDuration ? `${anime.episodeDuration} min` : null);
+
+  // ── EPISODE RANGES ──
+  const CHUNK_SIZE = 50;
+  const episodeRanges = useMemo(() => {
+    if (!episodes.length) return [];
+    const ranges = [];
+    for (let i = 0; i < episodes.length; i += CHUNK_SIZE) {
+      const start = episodes[i].number;
+      const end = episodes[Math.min(i + CHUNK_SIZE - 1, episodes.length - 1)].number;
+      ranges.push({
+        label: `${start}-${end}`,
+        data: episodes.slice(i, i + CHUNK_SIZE),
+        index: ranges.length
+      });
+    }
+    return isReversed ? [...ranges].reverse() : ranges;
+  }, [episodes, isReversed]);
+
+  const activeRangeData = useMemo(() => {
+    if (!episodeRanges.length) return [];
+    const found = episodeRanges.find(r => r.index === activeRange) || episodeRanges[0];
+    return isReversed ? [...found.data].reverse() : found.data;
+  }, [episodeRanges, activeRange, isReversed]);
 
   const posterUrl = anime.image  || "https://placehold.co/300x450/111115/DC143C?text=No+Image";
   const bannerUrl = anime.banner || posterUrl;
@@ -557,6 +585,23 @@ export default function DetailsScreen({ route, navigation }) {
               <View style={styles.epCountBadge}>
                 <Text style={styles.epCountText}>{episodes.length}</Text>
               </View>
+              
+              {episodes.length > CHUNK_SIZE && (
+                <TouchableOpacity 
+                  style={styles.sortToggle} 
+                  onPress={() => setIsReversed(!isReversed)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons 
+                    name={isReversed ? "arrow-down" : "arrow-up"} 
+                    size={12} 
+                    color={C.crimson} 
+                  />
+                  <Text style={styles.sortToggleText}>
+                    {isReversed ? "Newest" : "Oldest"}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
             {episodes.length > 0 && (
               <TouchableOpacity
@@ -569,18 +614,39 @@ export default function DetailsScreen({ route, navigation }) {
             )}
           </View>
 
+          {/* Range Selector */}
+          {episodeRanges.length > 1 && (
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={episodeRanges}
+              keyExtractor={(r) => r.label}
+              contentContainerStyle={styles.rangeSelector}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.rangePill, activeRange === item.index && styles.rangePillActive]}
+                  onPress={() => setActiveRange(item.index)}
+                >
+                  <Text style={[styles.rangePillText, activeRange === item.index && styles.rangePillActiveText]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+
           {episodes.length > 0 ? (
             <FlatList
-              data={episodes}
+              data={activeRangeData}
               keyExtractor={episodeKeyExtractor}
               renderItem={renderEpisode}
-              numColumns={3}
-              key={epCardWidth}
+              numColumns={isDesktop ? 2 : 1}
+              key={isDesktop ? "desktop-grid" : "mobile-list"}
               scrollEnabled={false}
               removeClippedSubviews
-              initialNumToRender={18}
-              maxToRenderPerBatch={18}
-              windowSize={5}
+              initialNumToRender={CHUNK_SIZE}
+              maxToRenderPerBatch={CHUNK_SIZE}
+              windowSize={3}
               contentContainerStyle={styles.episodesGrid}
             />
           ) : (
@@ -780,30 +846,67 @@ const styles = StyleSheet.create({
   },
   startButtonText: { color: C.dim, fontSize: 12, fontWeight: "700" },
 
-  episodesGrid: { gap: 10 },
-  episodeCardWrap: { flex: 1, margin: 5 },
+  sortToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(220,20,60,0.08)",
+    paddingLeft: 8,
+    paddingRight: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(220,20,60,0.25)",
+    marginLeft: 6,
+  },
+  sortToggleText: {
+    color: C.crimson,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  episodesGrid: { gap: 12 },
+  episodeCardWrap: { flex: 1, marginHorizontal: 2, marginVertical: 4 },
   episodeCard: {
+    flexDirection: "row",
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 8, paddingVertical: 12, paddingHorizontal: 10,
-    alignItems: "center", gap: 10, overflow: "hidden",
-    minHeight: 110, justifyContent: "space-between"
+    borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16,
+    alignItems: "center", gap: 16, overflow: "hidden",
   },
-  episodeCardActive: { borderColor: C.crimson, backgroundColor: C.crimsonDim },
+  episodeCardActive: { borderColor: C.crimson, backgroundColor: "rgba(220,20,60,0.12)" },
   episodeCardGlow: {
-    position: "absolute", top: 0, left: 0, right: 0,
-    height: 2, backgroundColor: C.crimson, opacity: 0.9,
+    position: "absolute", top: 0, bottom: 0, left: 0,
+    width: 4, backgroundColor: C.crimson,
   },
-  episodeInfo: { alignItems: "center", gap: 4, width: "100%" },
-  episodeNumber: { color: C.dim, fontSize: 10, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
+  episodeLeft: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    justifyContent: "center", alignItems: "center",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+  },
+  episodeNumber: { color: C.dim, fontSize: 13, fontWeight: "800" },
   episodeNumberActive: { color: C.crimson },
-  episodeTitle: { color: C.white, fontSize: 11, fontWeight: "600", textAlign: "center", lineHeight: 15, opacity: 0.85 },
-  episodeTitleActive: { color: C.white, opacity: 1 },
+  episodeMain: { flex: 1 },
+  episodeTitle: { color: C.white, fontSize: 13, fontWeight: "600", lineHeight: 18, opacity: 0.8 },
+  episodeTitleActive: { opacity: 1 },
   episodePlayIcon: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: C.surfaceHigh, justifyContent: "center", alignItems: "center",
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center", alignItems: "center",
+  },
+  episodePlayIconActive: { backgroundColor: C.crimson },
+
+  rangeSelector: { paddingBottom: 16, gap: 10 },
+  rangePill: {
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: 20, backgroundColor: C.surfaceHigh,
     borderWidth: 1, borderColor: C.border,
   },
-  episodePlayIconActive: { backgroundColor: C.crimson, borderColor: "transparent" },
+  rangePillActive: { backgroundColor: C.crimson, borderColor: C.crimson },
+  rangePillText: { color: C.dim, fontSize: 12, fontWeight: "700" },
+  rangePillActiveText: { color: C.white },
 
   noEpisodesContainer: { alignItems: "center", padding: 30, gap: 10 },
   noEpisodes: { color: C.dim, fontSize: 14 },
