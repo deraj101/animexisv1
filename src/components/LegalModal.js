@@ -34,6 +34,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { C } from "../theme";
+import ReportModal from "./ReportModal";
 
 // ─── PAGE CONTENT ─────────────────────────────────────────────────────────────
 
@@ -193,14 +194,14 @@ const PAGES = {
 
 // ─── CONTACT CONTENT ─────────────────────────────────────────────────────────
 
-function ContactContent() {
+function ContactContent({ onOpenReport }) {
   const CONTACT_ITEMS = [
     {
-      icon: "mail",
-      label: "General Support",
-      value: "support@animexis.app",
-      sub: "Account issues, billing, and general help",
-      action: () => Linking.openURL("mailto:support@animexis.app"),
+      icon: "bug",
+      label: "Bug Report & Support",
+      value: "Submit a Ticket",
+      sub: "Playback issues, app crashes, or general help",
+      action: onOpenReport,
     },
     {
       icon: "shield",
@@ -208,13 +209,6 @@ function ContactContent() {
       value: "legal@animexis.app",
       sub: "DMCA notices and IP concerns",
       action: () => Linking.openURL("mailto:legal@animexis.app"),
-    },
-    {
-      icon: "bug",
-      label: "Bug Reports",
-      value: "bugs@animexis.app",
-      sub: "App crashes, playback issues, and errors",
-      action: () => Linking.openURL("mailto:bugs@animexis.app"),
     },
     {
       icon: "briefcase",
@@ -334,6 +328,7 @@ const contact = StyleSheet.create({
 // ─── MAIN MODAL ───────────────────────────────────────────────────────────────
 
 export default function LegalModal({ page, onClose }) {
+  const [showReport, setShowReport] = useState(false);
   const slideAnim  = useRef(new Animated.Value(600)).current;
   const fadeAnim   = useRef(new Animated.Value(0)).current;
   // Keep last valid page so content stays visible during slide-out animation
@@ -414,7 +409,7 @@ export default function LegalModal({ page, onClose }) {
           showsVerticalScrollIndicator={false}
         >
           {data.contact ? (
-            <ContactContent />
+            <ContactContent onOpenReport={() => setShowReport(true)} />
           ) : (
             data.sections.map((s, i) => (
               <View key={i} style={styles.section}>
@@ -438,6 +433,8 @@ export default function LegalModal({ page, onClose }) {
           )}
         </ScrollView>
       </Animated.View>
+
+      <ReportModal visible={showReport} onClose={() => setShowReport(false)} />
     </Modal>
   );
 }

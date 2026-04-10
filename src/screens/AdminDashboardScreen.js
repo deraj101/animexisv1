@@ -322,6 +322,49 @@ const UserRow = React.memo(function UserRow({
   );
 });
 
+// ─── REPORT ROW ─────────────────────────────────────────────────────────────
+const ReportRow = React.memo(function ReportRow({ report, onUpdateStatus, onDelete, last }) {
+  const isBug = report.type === 'bug';
+  const isOpen = report.status === 'open';
+
+  return (
+    <View style={[styles.userRow, !last && styles.userRowBorder]}>
+      <View style={[styles.userAvatar, { backgroundColor: isBug ? `${C.crimson}1a` : `${C.dim}1a`, borderColor: isBug ? `${C.crimson}44` : `${C.dim}44` }]}>
+        <Ionicons name={isBug ? "bug" : "help-buoy"} size={16} color={isBug ? C.crimson : C.dim} />
+      </View>
+      <View style={styles.userInfo}>
+        <Text style={styles.userEmail} numberOfLines={1}>{report.title}</Text>
+        <View style={styles.userMetaRow}>
+          <Text style={styles.userMeta}>{report.email}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: isOpen ? `${C.crimson}15` : 'rgba(34,197,94,0.1)', borderColor: isOpen ? `${C.crimson}33` : 'rgba(34,197,94,0.3)' }]}>
+            <Text style={[styles.statusBadgeText, { color: isOpen ? C.crimson : '#22c55e' }]}>
+              {report.status.toUpperCase()}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.reportDesc} numberOfLines={2}>{report.description}</Text>
+        <Text style={styles.userMeta}>{new Date(report.createdAt).toLocaleDateString()}</Text>
+      </View>
+      <View style={styles.userActions}>
+        {isOpen && (
+          <TouchableOpacity 
+            style={styles.actionBtn} 
+            onPress={() => onUpdateStatus(report._id, 'resolved')}
+          >
+            <Ionicons name="checkmark-circle-outline" size={16} color="#22c55e" />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity 
+          style={styles.actionBtn} 
+          onPress={() => onDelete(report._id)}
+        >
+          <Ionicons name="trash-outline" size={16} color={C.dimmer} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+});
+
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
 export default function AdminDashboardScreen({ navigation }) {
   const { user, signOut } = useAuth();
@@ -361,6 +404,7 @@ export default function AdminDashboardScreen({ navigation }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreActivity, setHasMoreActivity] = useState(true);
   const [activeUsers, setActiveUsers] = useState(null);
+  const [reports,     setReports]     = useState([]);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const scrollY   = useRef(new Animated.Value(0)).current;
@@ -393,6 +437,7 @@ export default function AdminDashboardScreen({ navigation }) {
         API.get("/api/admin/activity?limit=10&skip=0",     cfg),
         API.get("/api/admin/scraper-status", cfg),
         API.get("/api/admin/monthly-visits", cfg),
+        API.get("/api/reports", cfg),
       ]);
 
       if (statsRes.status === "fulfilled") {
@@ -430,6 +475,9 @@ export default function AdminDashboardScreen({ navigation }) {
       }
       if (visitsRes.status === "fulfilled") {
         setMonthlyVisits(visitsRes.value.data.visits || []);
+      }
+      if (reportsRes.status === "fulfilled") {
+        setReports(reportsRes.value.data.reports || []);
       }
     } catch (err) {
       setApiError(err.message || "Failed to load dashboard data.");
@@ -623,6 +671,8 @@ export default function AdminDashboardScreen({ navigation }) {
     { key: "overview", label: "Overview", icon: "grid-outline" },
     { key: "users",    label: "Users",    icon: "people-outline",
       badge: recentUsers.length > 0 ? recentUsers.length : null, badgeColor: "#3b82f6" },
+    { key: "reports",  label: "Reports",  icon: "flag-outline",
+      badge: reports.filter(r => r.status === 'open').length || null, badgeColor: C.crimson },
     { key: "system",   label: "System",   icon: "settings-outline" },
   ];
 
@@ -978,7 +1028,7 @@ export default function AdminDashboardScreen({ navigation }) {
               <SectionHeader title="Actions" icon="construct-outline" />
               <View style={{ gap: 12 }}>
                 <TouchableOpacity 
-                  style={{ backgroundColor: C.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: C.border, flexDirection: "row", alignItems: "center", gap: 10 }}
+                   style={{ backgroundColor: C.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: C.border, flexDirection: "row", alignItems: "center", gap: 10 }}
                   onPress={async () => {
                     Alert.alert("Finding domain...", "Please wait. This may take up to 20 seconds depending on connection.");
                     try {
@@ -1012,6 +1062,53 @@ export default function AdminDashboardScreen({ navigation }) {
                   <Ionicons name="trash-outline" size={20} color={C.crimson} />
                   <Text style={{ color: C.crimson, fontSize: 15, fontWeight: "600", flex: 1 }}>Clear Server Cache</Text>
                 </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* ═══════════ REPORTS TAB ═══════════ */}
+          {activeTab === "reports" && (
+            <View style={styles.body}>
+              <SectionHeader title={`Reports (${reports.length})`} icon="flag-outline" />
+              <View style={styles.panel}>
+                {reports.length === 0 ? (
+                  <Text style={styles.emptyText}>No reports found.</Text>
+                ) : (
+                  reports.map((r, i) => (
+                    <ReportRow
+                      key={r._id || i}
+                      report={r}
+                      last={i === reports.length - 1}
+                      onUpdateStatus={async (id, status) => {
+                        try {
+                          const authHeader = await getAuthHeader();
+                          await API.patch(`/api/reports/${id}`, { status }, { headers: authHeader });
+                          setReports(prev => prev.map(x => x._id === id ? { ...x, status } : x));
+                        } catch {
+                          Alert.alert("Error", "Failed to update report.");
+                        }
+                      }}
+                      onDelete={async (id) => {
+                        Alert.alert("Delete Report", "Are you sure?", [
+                          { text: "Cancel", style: "cancel" },
+                          { 
+                            text: "Delete", 
+                            style: "destructive",
+                            onPress: async () => {
+                              try {
+                                const authHeader = await getAuthHeader();
+                                await API.delete(`/api/reports/${id}`, { headers: authHeader });
+                                setReports(prev => prev.filter(x => x._id !== id));
+                              } catch {
+                                Alert.alert("Error", "Failed to delete report.");
+                              }
+                            }
+                          }
+                        ]);
+                      }}
+                    />
+                  ))
+                )}
               </View>
             </View>
           )}
@@ -1147,6 +1244,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.border, borderRadius: 16,
     padding: 14, alignItems: "flex-start", gap: 4,
   },
+  statusBadge: {
+    paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, borderWidth: 1, marginLeft: 6,
+  },
+  statusBadgeText: { fontSize: 8, fontWeight: "800" },
+  reportDesc: { color: C.dim, fontSize: 11, marginTop: 4, lineHeight: 16 },
   statIconWrap: {
     width: 38, height: 38, borderRadius: 11,
     borderWidth: 1, justifyContent: "center", alignItems: "center", marginBottom: 4,
