@@ -26,9 +26,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      ["@stripe/stripe-react-native", {
-        "merchantIdentifier": "merchant.com.siegfrieddev.animexis"
-      }]
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.siegfrieddev.animexis"
+        }
+      ],
+      "expo-video",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
