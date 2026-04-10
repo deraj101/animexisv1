@@ -125,6 +125,29 @@ export default function DetailsScreen({ route, navigation }) {
   const [isReversed,    setIsReversed]= useState(false);
   const [activeRange,   setActiveRange] = useState(0); 
 
+  // ── EPISODE RANGES ──
+  const CHUNK_SIZE = 50;
+  const episodeRanges = useMemo(() => {
+    if (!episodes || !episodes.length) return [];
+    const ranges = [];
+    for (let i = 0; i < episodes.length; i += CHUNK_SIZE) {
+      const start = episodes[i].number;
+      const end = episodes[Math.min(i + CHUNK_SIZE - 1, episodes.length - 1)].number;
+      ranges.push({
+        label: `${start}-${end}`,
+        data: episodes.slice(i, i + CHUNK_SIZE),
+        index: ranges.length
+      });
+    }
+    return isReversed ? [...ranges].reverse() : ranges;
+  }, [episodes, isReversed]);
+
+  const activeRangeData = useMemo(() => {
+    if (!episodeRanges.length) return [];
+    const found = episodeRanges.find(r => r.index === activeRange) || episodeRanges[0];
+    return isReversed ? [...found.data].reverse() : found.data;
+  }, [episodeRanges, activeRange, isReversed]);
+
   const fadeIn  = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(30)).current;
   // Scroll position — drives the sticky header
@@ -296,28 +319,7 @@ export default function DetailsScreen({ route, navigation }) {
     );
   }
 
-  // ── EPISODE RANGES (Moved before conditional return to satisfy Rules of Hooks) ──
-  const CHUNK_SIZE = 50;
-  const episodeRanges = useMemo(() => {
-    if (!episodes || !episodes.length) return [];
-    const ranges = [];
-    for (let i = 0; i < episodes.length; i += CHUNK_SIZE) {
-      const start = episodes[i].number;
-      const end = episodes[Math.min(i + CHUNK_SIZE - 1, episodes.length - 1)].number;
-      ranges.push({
-        label: `${start}-${end}`,
-        data: episodes.slice(i, i + CHUNK_SIZE),
-        index: ranges.length
-      });
-    }
-    return isReversed ? [...ranges].reverse() : ranges;
-  }, [episodes, isReversed]);
-
-  const activeRangeData = useMemo(() => {
-    if (!episodeRanges.length) return [];
-    const found = episodeRanges.find(r => r.index === activeRange) || episodeRanges[0];
-    return isReversed ? [...found.data].reverse() : found.data;
-  }, [episodeRanges, activeRange, isReversed]);
+  // ── EPISODE RANGES (Moved to top level) ──
 
   if (!anime) return null;
 
