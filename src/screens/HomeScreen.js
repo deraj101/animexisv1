@@ -444,6 +444,10 @@ export default function HomeScreen({ navigation }) {
   }, [dropdownAnim]);
 
   useEffect(() => {
+    toggleDropdown(showSuggestions && suggestions.length > 0);
+  }, [showSuggestions, suggestions, toggleDropdown]);
+
+  useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(logoPulse, { toValue: 1.04, duration: 1800, useNativeDriver: true }),
