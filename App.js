@@ -89,9 +89,18 @@ function AppNavigator() {
 }
 
 export default function App() {
+  const linking = {
+    prefixes: ["animexis://", "exp://", "https://animexisv1.vercel.app"],
+    config: {
+      screens: {
+        SubscriptionSuccess: "subscription-success",
+      },
+    },
+  };
+
   return (
     <AuthProvider>
-      <NavigationContainer>
+      <NavigationContainer linking={linking}>
         <AppNavigator />
       </NavigationContainer>
     </AuthProvider>
