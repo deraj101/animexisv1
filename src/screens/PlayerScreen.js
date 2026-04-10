@@ -275,8 +275,7 @@ function PlayerControls({
 }) {
   return (
     <Animated.View
-      pointerEvents={visible ? "box-none" : "none"}
-      style={[styles.controlsOverlay, { opacity: controlsAnim }]}
+      style={[styles.controlsOverlay, { opacity: controlsAnim, pointerEvents: visible ? "box-none" : "none" }]}
     >
       {/* Top gradient + title bar */}
       <LinearGradient
@@ -295,7 +294,7 @@ function PlayerControls({
       </LinearGradient>
 
       {/* Centre play/pause hint (just a visual cue) */}
-      <View style={styles.controlsCenter} pointerEvents="none">
+      <View style={[styles.controlsCenter, { pointerEvents: "none" }]}>
         <View style={styles.controlsCenterIcon}>
           <Ionicons name="pause" size={28} color="rgba(255,255,255,0.5)" />
         </View>
