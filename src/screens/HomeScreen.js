@@ -32,13 +32,6 @@ import AnimeCard from "../components/AnimeCard";
 import DotCircleLoader from "../components/DotCircleLoader";
 
 
-// ─── RESPONSIVE HELPERS ───────────────────────────────────────────────────────
-const getCardDimensions = (width) => {
-  if (width >= 1200) return { cardWidth: width * 0.135, cardHeight: width * 0.19 };
-  if (width >= 992)  return { cardWidth: width * 0.16,  cardHeight: width * 0.225 };
-  if (width >= 768)  return { cardWidth: width * 0.20,  cardHeight: width * 0.28 };
-  return { cardWidth: width * 0.38, cardHeight: width * 0.53 };
-};
 const getHeroHeight = (w) => {
   if (w >= 1200) return 500;
   if (w >= 992)  return 450;
@@ -169,7 +162,7 @@ const Section = React.memo(function Section({
                 item={item}
                 onPress={onItemPress}
                 index={index}
-                width={gridColumns > 2 ? (cardWidth * 2) + gridGap : cardWidth * 2.1} 
+                width={gridColumns > 2 ? (cardWidth * 2) + gridGap : (cardWidth * 2) + 20} 
               />
             ) : (
               <AnimeCard
@@ -427,7 +420,6 @@ export default function HomeScreen({ navigation }) {
      return () => clearInterval(interval);
   }, [showSuccess, isSyncing, user?.subscription, refreshSession]);
 
-  const { cardWidth, cardHeight } = useMemo(() => getCardDimensions(width), [width]);
   const heroHeight = useMemo(() => getHeroHeight(width), [width]);
   
   const gridColumns = width >= 1200 ? 6 : width >= 992 ? 5 : width >= 768 ? 4 : 2;
@@ -988,7 +980,7 @@ export default function HomeScreen({ navigation }) {
         )}
 
         {/* ── HERO SPOTLIGHT CAROUSEL ── */}
-        {spotlight.length > 0 && query.length < 3 && (
+        {spotlight.length > 0 && anime.length === 0 && (
           <View style={[styles.heroContainer, { height: heroHeight, width: width - 32, alignSelf: 'center' }]}>
             <FlatList
               ref={heroFlatListRef}
@@ -1153,9 +1145,9 @@ export default function HomeScreen({ navigation }) {
         {/* ── SECTIONS / SKELETON ── */}
         {sectionsLoading ? (
           <>
-            <SkeletonSection title="Recent Episodes" cardWidth={cardWidth} cardHeight={cardHeight} shimmerX={shimmerX} count={5} />
-            <SkeletonSection title="Ongoing Series" cardWidth={cardWidth} cardHeight={cardHeight} shimmerX={shimmerX} count={5} />
-            <SkeletonSection title="Trending" cardWidth={cardWidth} cardHeight={cardHeight} shimmerX={shimmerX} count={5} />
+            <SkeletonSection title="Recent Episodes" cardWidth={gridCardWidth} cardHeight={gridCardHeight} shimmerX={shimmerX} count={5} />
+            <SkeletonSection title="Ongoing Series" cardWidth={gridCardWidth} cardHeight={gridCardHeight} shimmerX={shimmerX} count={5} />
+            <SkeletonSection title="Trending" cardWidth={gridCardWidth} cardHeight={gridCardHeight} shimmerX={shimmerX} count={5} />
           </>
         ) : anime.length > 0 ? (
           <View style={styles.section}>
@@ -1231,12 +1223,12 @@ export default function HomeScreen({ navigation }) {
           </View>
         ) : recent.length > 0 || trending.length > 0 || continueWatching.length > 0 ? (
           <>
-            {continueWatching.length > 0 && query.length < 3 && (
+            {continueWatching.length > 0 && anime.length === 0 && (
               <Section
                 title="Continue Watching"
                 data={continueWatching}
-                cardWidth={cardWidth}
-                cardHeight={cardHeight}
+                cardWidth={gridCardWidth}
+                cardHeight={gridCardHeight}
                 onItemPress={handleContinuePress}
                 variant="recent"
               />
@@ -1328,7 +1320,7 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {activeData.length === 0 && anime.length === 0 && query.length >= 3 && (
+        {activeData.length === 0 && anime.length === 0 && query.length >= 3 && !showSuggestions && (
           <View style={styles.noResults}>
             <View style={styles.noResultsIcon}>
               <Ionicons name="search-outline" size={36} color={C.crimson} />
