@@ -300,13 +300,6 @@ function PlayerControls({
         </View>
       </View>
 
-      {/* Bottom gradient bar */}
-      <LinearGradient
-        colors={["transparent", "rgba(0,0,0,0.65)"]}
-        style={styles.controlsBottom}
-      >
-        <Text style={styles.controlsHint}>Tap to hide controls</Text>
-      </LinearGradient>
     </Animated.View>
   );
 }
@@ -413,9 +406,9 @@ export default function PlayerScreen({ route, navigation }) {
   useEffect(() => {
     Animated.parallel([
       Animated.timing(cardAnim, { toValue: 1, duration: 260, useNativeDriver: true }),
-      Animated.spring(cardScale, { toValue: 1, tension: 75, friction: 11, useNativeDriver: true })
-    ]).start();
     pickAndLoadSource();
+    // Show controls initially for 3s so user sees title & close button
+    showControls();
   }, []);
 
   const [showComments, setShowComments] = useState(false);
@@ -860,16 +853,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
     borderWidth: 1, borderColor: "rgba(255,255,255,0.15)",
     justifyContent: "center", alignItems: "center",
-  },
-  controlsBottom: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    paddingTop: 28,
-    alignItems: "flex-end",
-  },
-  controlsHint: {
-    color: "rgba(255,255,255,0.4)",
-    fontSize: 11,
   },
 
   iconBtnWrap: { position: "relative", alignItems: "center" },
