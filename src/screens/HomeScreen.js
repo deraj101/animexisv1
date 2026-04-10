@@ -743,6 +743,24 @@ export default function HomeScreen({ navigation }) {
             </View>
           </Animated.View>
 
+          {/* ── Desktop Nav Links ── */}
+          {width >= 768 && (
+            <View style={styles.navLinks}>
+              <TouchableOpacity 
+                style={styles.navLink} 
+                onPress={() => scrollY.setValue(0)}
+              >
+                <Text style={styles.navLinkText}>Home</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.navLink} 
+                onPress={() => navigation.navigate("AboutUs")}
+              >
+                <Text style={styles.navLinkText}>About Us</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {width >= 768 ? (
             <>
               <View style={styles.searchContainer}>
@@ -941,6 +959,22 @@ export default function HomeScreen({ navigation }) {
             </View>
 
             <View style={styles.mobileNavRow}>
+              <TouchableOpacity
+                onPress={() => { setMobileMenuOpen(false); scrollY.setValue(0); }}
+                style={styles.mobileNavBtn}
+              >
+                <Ionicons name="home-outline" size={20} color={C.white} />
+                <Text style={styles.mobileNavText}>Home</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => { setMobileMenuOpen(false); navigation.navigate("AboutUs"); }}
+                style={styles.mobileNavBtn}
+              >
+                <Ionicons name="information-circle-outline" size={20} color={C.white} />
+                <Text style={styles.mobileNavText}>About Us</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 onPress={() => { setMobileMenuOpen(false); navigation.navigate("Notifications"); }}
                 style={styles.mobileNavBtn}
@@ -1414,6 +1448,9 @@ const styles = StyleSheet.create({
     elevation: 4, shadowColor: C.crimson, shadowOpacity: 0.2, shadowRadius: 4,
   },
   logo: { color: C.white, fontSize: 22, fontWeight: "900", letterSpacing: -1 },
+  navLinks: { flexDirection: "row", gap: 24, marginLeft: 20 },
+  navLink: { paddingVertical: 8 },
+  navLinkText: { color: C.dim, fontSize: 14, fontWeight: "600" },
 
   searchContainer: { position: "relative", zIndex: 1100 },
   searchWrapper: {

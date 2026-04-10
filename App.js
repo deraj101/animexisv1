@@ -19,6 +19,7 @@ import PublicProfileScreen  from "./src/screens/PublicProfileScreen"; // 👤 NE
 import SubscriptionScreen   from "./src/screens/SubscriptionScreen";  // 💳 NEW
 import SubscriptionSuccessScreen from "./src/screens/SubscriptionSuccessScreen"; // ✅ NEW
 import AlphabetScreen from "./src/screens/AlphabetScreen"; // 🔠 NEW
+import AboutUsScreen from "./src/screens/AboutUsScreen"; // ℹ️ NEW
 
 const Stack = createNativeStackNavigator();
 
@@ -82,6 +83,7 @@ function AppNavigator() {
           />
           <Stack.Screen name="Subscription" component={SubscriptionScreen} />
           <Stack.Screen name="SubscriptionSuccess" component={SubscriptionSuccessScreen} />
+          <Stack.Screen name="AboutUs" component={AboutUsScreen} options={{ animation: "slide_from_right" }} />
         </>
       )}
     </Stack.Navigator>
