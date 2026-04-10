@@ -406,6 +406,8 @@ export default function PlayerScreen({ route, navigation }) {
   useEffect(() => {
     Animated.parallel([
       Animated.timing(cardAnim, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.spring(cardScale, { toValue: 1, tension: 75, friction: 11, useNativeDriver: true })
+    ]).start();
     pickAndLoadSource();
     // Show controls initially for 3s so user sees title & close button
     showControls();
