@@ -62,9 +62,16 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isAc
         activeOpacity={1}
       >
         {isActive && <View style={styles.episodeCardGlow} />}
-        <Text style={[styles.episodeNumber, isActive && styles.episodeNumberActive]}>
-          {item.displayNumber || item.number}
-        </Text>
+        <View style={styles.episodeInfo}>
+          <Text style={[styles.episodeNumber, isActive && styles.episodeNumberActive]}>
+            EP {item.displayNumber || item.number}
+          </Text>
+          {item.title && (
+            <Text style={[styles.episodeTitle, isActive && styles.episodeTitleActive]} numberOfLines={2}>
+              {item.title}
+            </Text>
+          )}
+        </View>
         <View style={[styles.episodePlayIcon, isActive && styles.episodePlayIconActive]}>
           <Ionicons name="play" size={13} color="white" />
         </View>
@@ -204,9 +211,10 @@ export default function DetailsScreen({ route, navigation }) {
         }
         navigation.navigate("Player", {
           video:         episode.url,
-          title:         `Episode ${episode.displayNumber || episode.number}`,
+          title:         episode.title ? `Ep ${episode.number}: ${episode.title}` : `Episode ${episode.displayNumber || episode.number}`,
           animeTitle:    anime?.title || initialTitle,
           episodeNumber: episode.number,
+          episodeTitle:  episode.title,
           episodeData:   res.data,
           animeId:       id,
           animeImage:    anime?.image,
@@ -776,16 +784,20 @@ const styles = StyleSheet.create({
   episodeCardWrap: { flex: 1, margin: 5 },
   episodeCard: {
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 6, paddingVertical: 14, paddingHorizontal: 8,
-    alignItems: "center", gap: 8, overflow: "hidden",
+    borderRadius: 8, paddingVertical: 12, paddingHorizontal: 10,
+    alignItems: "center", gap: 10, overflow: "hidden",
+    minHeight: 110, justifyContent: "space-between"
   },
   episodeCardActive: { borderColor: C.crimson, backgroundColor: C.crimsonDim },
   episodeCardGlow: {
     position: "absolute", top: 0, left: 0, right: 0,
     height: 2, backgroundColor: C.crimson, opacity: 0.9,
   },
-  episodeNumber: { color: C.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
+  episodeInfo: { alignItems: "center", gap: 4, width: "100%" },
+  episodeNumber: { color: C.dim, fontSize: 10, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
   episodeNumberActive: { color: C.crimson },
+  episodeTitle: { color: C.white, fontSize: 11, fontWeight: "600", textAlign: "center", lineHeight: 15, opacity: 0.85 },
+  episodeTitleActive: { color: C.white, opacity: 1 },
   episodePlayIcon: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: C.surfaceHigh, justifyContent: "center", alignItems: "center",

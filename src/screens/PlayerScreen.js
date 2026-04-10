@@ -318,7 +318,7 @@ const PLAYER_H = Math.round(MODAL_W * (9 / 16));
 
 // ─── PLAYER SCREEN ────────────────────────────────────────────────────────────
 export default function PlayerScreen({ route, navigation }) {
-  const { video, title, animeTitle, episodeNumber, episodeData, animeId, animeImage } = route.params;
+  const { video, title, animeTitle, episodeNumber, episodeTitle, episodeData, animeId, animeImage } = route.params;
   const { user } = useAuth();
 
   const [playerLoading, setPlayerLoading] = useState(true);
@@ -543,7 +543,7 @@ export default function PlayerScreen({ route, navigation }) {
   const handleAdFinished = useCallback(() => setShowAd(false), []);
 
   const headerTitle = animeTitle
-    ? `${animeTitle}${episodeNumber ? `  ·  Ep ${episodeNumber}` : ""}`
+    ? `${animeTitle}  ·  Ep ${episodeNumber}${episodeTitle ? `: ${episodeTitle}` : ""}`
     : title || "Now Playing";
 
   // ── Player body ───────────────────────────────────────────────────────────────
