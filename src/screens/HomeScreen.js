@@ -441,21 +441,7 @@ export default function HomeScreen({ navigation }) {
       friction: 10,
       useNativeDriver: true,
     }).start();
-  }, []);
-
-  useEffect(() => {
-    toggleDropdown(showSuggestions && suggestions.length > 0);
-  }, [showSuggestions, suggestions, toggleDropdown]);
-
-  const onSearchFocus = useCallback(() =>
-    Animated.timing(searchFocus, { toValue: 1, duration: 200, useNativeDriver: false }).start(), []);
-  const onSearchBlur = useCallback(() =>
-    Animated.timing(searchFocus, { toValue: 0, duration: 200, useNativeDriver: false }).start(), []);
-
-  const searchBorderColor = searchFocus.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [C.border, C.crimsonBorder],
-  });
+  }, [dropdownAnim]);
 
   useEffect(() => {
     const anim = Animated.loop(
@@ -742,12 +728,6 @@ export default function HomeScreen({ navigation }) {
               styles.searchWrapper,
               {
                 width: width >= 768 ? 280 : 210,
-                borderColor: searchBorderColor,
-                ...(Platform.OS === "web" ? {
-                  boxShadow: showSuggestions || query.length > 0
-                    ? `0 0 0 3px ${C.crimsonGlow}`
-                    : "none",
-                } : {}),
               }
             ]}>
               {suggestLoading
@@ -765,11 +745,9 @@ export default function HomeScreen({ navigation }) {
                 style={[styles.searchInput, { paddingVertical: 0 }]}
                 returnKeyType="search"
                 onFocus={() => {
-                  onSearchFocus();
                   if (suggestions.length > 0) setShowSuggestions(true);
                 }}
                 onBlur={() => {
-                  onSearchBlur();
                   setTimeout(() => setShowSuggestions(false), 150);
                 }}
                 onSubmitEditing={() => { searchAnime(query.trim()); setShowSuggestions(false); }}
@@ -1416,7 +1394,14 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === "ios" ? 9 : 6,
   },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, color: C.white, fontSize: 14, padding: 0 },
+  searchInput: {
+    flex: 1,
+    color: C.white,
+    fontSize: 14,
+    marginLeft: 8,
+    height: "100%",
+    outlineStyle: 'none',
+  },
   clearButton: { marginLeft: 6 },
 
   suggestionsDropdown: {

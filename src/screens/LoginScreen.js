@@ -79,6 +79,7 @@ const otp = StyleSheet.create({
     width: 46, height: 54, borderRadius: 12, borderWidth: 1,
     borderColor: C.border, backgroundColor: C.surfaceHigh,
     color: C.white, fontSize: 22, fontWeight: "700", textAlign: "center",
+    outlineStyle: 'none',
   },
   filled: { borderColor: "rgba(255,255,255,0.22)", backgroundColor: "rgba(255,255,255,0.06)" },
 });
@@ -676,7 +677,7 @@ const styles = StyleSheet.create({
     borderRadius: 14, paddingHorizontal: 14, marginBottom: 14, height: 52,
   },
   inputIcon: { marginRight: 10 },
-  input:     { flex: 1, color: C.white, fontSize: 15, height: "100%" },
+  input:     { flex: 1, color: C.white, fontSize: 15, height: "100%", outlineStyle: 'none' },
 
   forgotRow:  { alignSelf: "flex-end", marginBottom: 16, marginTop: -4 },
   forgotText: { color: C.crimson, fontSize: 13, fontWeight: "500" },

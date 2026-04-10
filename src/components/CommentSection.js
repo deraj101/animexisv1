@@ -217,20 +217,9 @@ function ReplyInput({ parentId, currentUser, onSubmit, onCancel }) {
 function NewCommentInput({ currentUser, onSubmit, isPosting }) {
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
-  const heightAnim = useRef(new Animated.Value(0)).current;
-  const borderAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(heightAnim, { toValue: focused ? 1 : 0, duration: 200, useNativeDriver: false }),
-      Animated.timing(borderAnim, { toValue: focused ? 1 : 0, duration: 200, useNativeDriver: false }),
-    ]).start();
-  }, [focused]);
-
-  const borderColor = borderAnim.interpolate({ inputRange: [0, 1], outputRange: [C.border, C.crimson] });
 
   return (
-    <Animated.View style={[styles.newCommentCard, { borderColor }]}>
+    <Animated.View style={[styles.newCommentCard]}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
         <Avatar uri={currentUser?.profile_image} email={currentUser?.email || 'guest'} size={36} border={currentUser?.profile_border} />
         <TextInput
@@ -481,6 +470,7 @@ const styles = StyleSheet.create({
   newCommentInput: {
     flex: 1, color: C.white, fontSize: 14,
     minHeight: 40, textAlignVertical: 'top',
+    outlineStyle: 'none',
   },
   newCommentBtns: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
   charCount: { color: C.dimmer, fontSize: 11, marginRight: 'auto' },
@@ -526,7 +516,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: C.surfaceHigh,
     borderRadius: 12, borderWidth: 1, borderColor: C.glass, padding: 10,
   },
-  replyTextInput: { color: C.white, fontSize: 13, minHeight: 36, textAlignVertical: 'top' },
+  replyTextInput: { color: C.white, fontSize: 13, minHeight: 36, textAlignVertical: 'top', outlineStyle: 'none' },
   replyBoxActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 8 },
   replyActionBtn: { paddingHorizontal: 12, paddingVertical: 5 },
   replySubmitBtn: { backgroundColor: C.crimson, borderRadius: 16 },

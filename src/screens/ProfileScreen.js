@@ -814,7 +814,7 @@ const styles = StyleSheet.create({
   heroName: { color: C.white, fontSize: 22, fontWeight: "800", letterSpacing: -0.4 },
   editNameBadge: { width: 22, height: 22, borderRadius: 6, backgroundColor: C.surfaceHigh, borderWidth: 1, borderColor: C.border, justifyContent: "center", alignItems: "center" },
   nameEditRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3, backgroundColor: C.surface, borderWidth: 1, borderColor: C.glass, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6 },
-  nameInput: { color: C.white, fontSize: 17, fontWeight: "700", flex: 1, padding: 0, minWidth: 120 },
+  nameInput: { color: C.white, fontSize: 17, fontWeight: "700", flex: 1, padding: 0, minWidth: 120, outlineStyle: 'none' },
   nameActionBtn: { width: 30, height: 30, borderRadius: 8, justifyContent: "center", alignItems: "center" },
 
   heroEmail: { color: C.dim, fontSize: 13, marginBottom: 12 },
