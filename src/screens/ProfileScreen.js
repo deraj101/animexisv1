@@ -439,16 +439,23 @@ export default function ProfileScreen({ navigation }) {
   
   let accountAgeText = "0m";
   if (user?.joined_at) {
-    const diffMs = Math.max(0, Date.now() - new Date(user.joined_at).getTime());
-    const d = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const h = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
-    const m = Math.floor((diffMs / 1000 / 60) % 60);
+    const now = Date.now();
+    const joined = new Date(user.joined_at).getTime();
+    const diffMs = now - joined;
 
-    const parts = [];
-    if (d > 0) parts.push(`${d}d`);
-    if (h > 0) parts.push(`${h}h`);
-    if (m > 0 || parts.length === 0) parts.push(`${m}m`);
-    accountAgeText = parts.join(" ");
+    if (diffMs < 60000) { // Less than 1 minute
+      accountAgeText = "Just now";
+    } else {
+      const d = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const h = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
+      const m = Math.floor((diffMs / 1000 / 60) % 60);
+
+      const parts = [];
+      if (d > 0) parts.push(`${d}d`);
+      if (h > 0) parts.push(`${h}h`);
+      if (m > 0 || parts.length === 0) parts.push(`${m}m`);
+      accountAgeText = parts.join(" ");
+    }
   }
 
   const badges = [

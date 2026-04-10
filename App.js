@@ -31,6 +31,23 @@ function AppNavigator() {
     API.post("/api/anime/visit").catch(() => {});
   }, []);
 
+  // 🔥 Heartbeat: Keep user "Active Now" while using the app
+  useEffect(() => {
+    if (!user) return;
+
+    // Send initial heartbeat
+    API.get("/api/auth/heartbeat").catch(() => {});
+
+    // Repeat every 3 minutes (Active window is 5m in backend)
+    const interval = setInterval(() => {
+      API.get("/api/auth/heartbeat").catch((err) => {
+        console.log("[heartbeat] failed:", err.message);
+      });
+    }, 180000); // 3 * 60 * 1000
+
+    return () => clearInterval(interval);
+  }, [user]);
+
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: "#080809", justifyContent: "center", alignItems: "center" }}>
