@@ -12,10 +12,11 @@ import LegalModal from "./LegalModal";
 
 const ALPHABET = ["#", "0-9", ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
 const LINKS = [
-  { label: "Terms & Conditions", page: "terms"   },
-  { label: "Privacy Policy",     page: "privacy" },
-  { label: "Terms of Use",       page: "use"     },
-  { label: "Contact",            page: "contact" },
+  { label: "About Us",           screen: "AboutUs" },
+  { label: "Terms & Conditions", page: "terms"     },
+  { label: "Privacy Policy",     page: "privacy"   },
+  { label: "Terms of Use",       page: "use"       },
+  { label: "Contact",            page: "contact"   },
 ];
 
 export default function AppFooter() {
@@ -53,10 +54,13 @@ export default function AppFooter() {
 
         {/* Links */}
         <View style={styles.linkRow}>
-          {LINKS.map(({ label, page }, i) => (
+          {LINKS.map(({ label, page, screen }, i) => (
             <React.Fragment key={label}>
               <TouchableOpacity
-                onPress={() => setLegalPage(page)}
+                onPress={() => {
+                  if (screen) navigation.navigate(screen);
+                  else if (page) setLegalPage(page);
+                }}
                 hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
               >
                 <Text style={styles.link}>{label}</Text>
