@@ -51,7 +51,7 @@ const C = {
 // ─── AD CONFIG ────────────────────────────────────────────────────────────────
 const ADS = [
   {
-    url:       "http://10.238.255.17:3000/api/anime/ad",
+    url:       `${process.env.EXPO_PUBLIC_API_URL}/api/anime/ad`,
     skipAfter: 5,
     label:     "Ad · animexis.com",
   },
