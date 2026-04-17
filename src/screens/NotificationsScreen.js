@@ -22,6 +22,7 @@ const NotificationItem = ({ item, onPress }) => {
       case 'LIKE':    return { name: 'heart', color: '#ff4b6b' };
       case 'REPLY':   return { name: 'chatbubble-ellipses', color: '#4ba3ff' };
       case 'RELEASE': return { name: 'play-circle', color: C.crimson };
+      case 'SUPPORT_REPLY': return { name: 'shield-checkmark', color: '#22c55e' };
       default:        return { name: 'notifications', color: C.dim };
     }
   };
@@ -84,6 +85,11 @@ export default function NotificationsScreen({ navigation }) {
     const isCommentAction = item.type === 'LIKE' || item.type === 'REPLY';
 
     // 2. Navigate based on type
+    if (item.type === 'SUPPORT_REPLY') {
+      Alert.alert(item.title, item.message);
+      return;
+    }
+
     if (item.episodeNum) {
       // Find episode info and Go to Player
       try {

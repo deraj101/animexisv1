@@ -1,20 +1,64 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   BackHandler,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
+import API from "../services/api";
+import DotCircleLoader from "../components/DotCircleLoader";
 
-export default function SubscriptionSuccessScreen({ navigation }) {
-  const { user } = useAuth(); // We'll assume the webhook has upgraded them by now
+export default function SubscriptionSuccessScreen({ navigation, route }) {
+  const { user, refreshSession } = useAuth();
+  const [isVerifying, setIsVerifying] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Disable back button to prevent returning to payment page
+  const sessionId = route?.params?.session_id;
+
+  // 1. Verification Logic
+  useEffect(() => {
+    let interval;
+    let attempts = 0;
+    const maxAttempts = 15; // 30 seconds total
+
+    const checkStatus = async () => {
+      if (!sessionId) {
+        setIsVerifying(false);
+        return;
+      }
+
+      try {
+        const res = await API.get(`/api/payments/sync-session/${sessionId}`);
+        if (res.data.success && res.data.subscription === "premium") {
+          await refreshSession();
+          setIsVerifying(false);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.warn("[Success] Sync failed, retrying...", err.message);
+      }
+
+      attempts++;
+      if (attempts >= maxAttempts) {
+        setIsVerifying(false);
+        setError("Verification taking longer than usual, but don't worry! Your premium status will update shortly.");
+        clearInterval(interval);
+      }
+    };
+
+    checkStatus();
+    interval = setInterval(checkStatus, 2500);
+
+    return () => clearInterval(interval);
+  }, [sessionId, refreshSession]);
+
+  // 2. Back Handler
   useEffect(() => {
     const backAction = () => {
       navigation.replace("Home");
@@ -22,7 +66,7 @@ export default function SubscriptionSuccessScreen({ navigation }) {
     };
     const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
     return () => backHandler.remove();
-  }, []);
+  }, [navigation]);
 
   const handleContinue = () => {
     navigation.replace("Home");
@@ -38,33 +82,54 @@ export default function SubscriptionSuccessScreen({ navigation }) {
       <View style={styles.content}>
         <View style={styles.iconContainer}>
           <LinearGradient
-            colors={["#DC143C", "#A30F2D"]}
+            colors={isVerifying ? ["#334155", "#1e293b"] : ["#DC143C", "#A30F2D"]}
             style={styles.iconCircle}
           >
-            <Ionicons name="sparkles" size={50} color="#fff" />
+            {isVerifying ? (
+              <DotCircleLoader size={40} color={C.white} />
+            ) : (
+              <Ionicons name="sparkles" size={50} color="#fff" />
+            )}
           </LinearGradient>
-          <View style={styles.checkBadge}>
-            <Ionicons name="checkmark" size={20} color="#fff" />
-          </View>
+          {!isVerifying && !error && (
+            <View style={styles.checkBadge}>
+              <Ionicons name="checkmark" size={20} color="#fff" />
+            </View>
+          )}
         </View>
 
-        <Text style={styles.title}>Welcome to Premium!</Text>
+        <Text style={styles.title}>
+          {isVerifying ? "Verifying Payment..." : "Welcome to Premium!"}
+        </Text>
         <Text style={styles.subtitle}>
-          Your payment was successful. You now have unlimited, ad-free access to the entire Animexis catalog.
+          {isVerifying 
+            ? "We're confirming your subscription with Stripe. This usually takes a few seconds..." 
+            : "Your payment was successful. You now have unlimited, ad-free access to the entire Animexis catalog."
+          }
         </Text>
 
-        <View style={styles.divider} />
+        {error && (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={20} color={C.crimson} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
-        <View style={styles.infoBox}>
-          <Ionicons name="information-circle-outline" size={20} color={C.dim} />
-          <Text style={styles.infoText}>
-            It may take a few moments for your "Premium" badge to appear everywhere as your profile synchronizes.
-          </Text>
-        </View>
+        {!isVerifying && <View style={styles.divider} />}
+
+        {!isVerifying && (
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle-outline" size={20} color={C.dim} />
+            <Text style={styles.infoText}>
+              Your journey starts now. Your premium badge and borders are now active on your profile.
+            </Text>
+          </View>
+        )}
 
         <TouchableOpacity 
-          style={styles.button} 
+          style={[styles.button, isVerifying && { opacity: 0.6 }]} 
           onPress={handleContinue}
+          disabled={isVerifying}
           activeOpacity={0.8}
         >
           <LinearGradient
@@ -72,8 +137,10 @@ export default function SubscriptionSuccessScreen({ navigation }) {
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
             style={styles.btnGrad}
           >
-            <Text style={styles.btnText}>Start Watching</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
+            <Text style={styles.btnText}>
+              {isVerifying ? "Please Wait..." : "Start Watching"}
+            </Text>
+            {!isVerifying && <Ionicons name="arrow-forward" size={18} color="#fff" />}
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -110,6 +177,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.border, marginBottom: 40
   },
   infoText: { flex: 1, color: C.dim, fontSize: 13, lineHeight: 18 },
+
+  errorBox: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "rgba(220, 20, 60, 0.05)", padding: 16, borderRadius: 12,
+    borderWidth: 1, borderColor: "rgba(220, 20, 60, 0.2)", marginBottom: 30
+  },
+  errorText: { flex: 1, color: C.dim, fontSize: 13, lineHeight: 18 },
 
   button: { width: "100%", borderRadius: 16, overflow: "hidden" },
   btnGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 18, gap: 12 },

@@ -26,6 +26,7 @@ import API from "../services/api";
 import * as NotificationApi from "../services/notificationApi"; // 🔔 NEW
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
+import * as ExpoLinking from "expo-linking";
 import PremiumBorder from "../components/PremiumBorder"; // 🎨 NEW
 import AppFooter from "../components/AppFooter";
 import AnimeCard from "../components/AnimeCard";
@@ -34,8 +35,8 @@ import DotCircleLoader from "../components/DotCircleLoader";
 
 const getHeroHeight = (w) => {
   if (w >= 1200) return 500;
-  if (w >= 992)  return 450;
-  if (w >= 768)  return 400;
+  if (w >= 992) return 450;
+  if (w >= 768) return 400;
   return 480; // 📱 Increased for Mobile Stacking Mode
 };
 
@@ -52,18 +53,18 @@ const cachedGet = async (url, ttlMs = 60_000) => {
 // ─── ONGOING CARD (Horizontal) ────────────────────────────────────────────────
 const OngoingCard = React.memo(function OngoingCard({ item, onPress, index, width }) {
   const opacity = useRef(new Animated.Value(0)).current;
-  const slideX  = useRef(new Animated.Value(-16)).current;
-  const scale   = useRef(new Animated.Value(1)).current;
+  const slideX = useRef(new Animated.Value(-16)).current;
+  const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 40, useNativeDriver: true }),
-      Animated.spring(slideX,  { toValue: 0, delay: index * 40, tension: 100, friction: 10, useNativeDriver: true }),
+      Animated.spring(slideX, { toValue: 0, delay: index * 40, tension: 100, friction: 10, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const onPressIn  = useCallback(() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start(), []);
-  const onPressOut = useCallback(() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start(), []);
+  const onPressIn = useCallback(() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start(), []);
+  const onPressOut = useCallback(() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start(), []);
 
   const imgUrl = item.image || "https://placehold.co/100x140/111115/DC143C?text=N";
   const epLabel = item.episode || (item.latestEpisode ? `Ep ${item.latestEpisode.replace(/\D/g, "")}` : "Ongoing");
@@ -81,8 +82,8 @@ const OngoingCard = React.memo(function OngoingCard({ item, onPress, index, widt
         <View style={styles.ongoingInfo}>
           <Text style={styles.ongoingTitle} numberOfLines={2}>{item.title}</Text>
           <View style={styles.ongoingBadge}>
-             <Ionicons name="play-circle" size={10} color={C.white} />
-             <Text style={styles.ongoingBadgeText}>{epLabel}</Text>
+            <Ionicons name="play-circle" size={10} color={C.white} />
+            <Text style={styles.ongoingBadgeText}>{epLabel}</Text>
           </View>
         </View>
         <Ionicons name="chevron-forward" size={16} color={C.dim} style={{ marginRight: 12 }} />
@@ -94,17 +95,17 @@ const OngoingCard = React.memo(function OngoingCard({ item, onPress, index, widt
 // ─── SUGGESTION ITEM ──────────────────────────────────────────────────────────
 const SuggestionItem = React.memo(function SuggestionItem({ item, onPress, index }) {
   const translateX = useRef(new Animated.Value(-20)).current;
-  const opacity    = useRef(new Animated.Value(0)).current;
-  const scale      = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity,    { toValue: 1, duration: 200, delay: index * 40, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 200, delay: index * 40, useNativeDriver: true }),
       Animated.spring(translateX, { toValue: 0, delay: index * 40, tension: 100, friction: 10, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const onPressIn  = useCallback(() =>
+  const onPressIn = useCallback(() =>
     Animated.spring(scale, { toValue: 0.96, tension: 150, friction: 8, useNativeDriver: true }).start(), []);
   const onPressOut = useCallback(() =>
     Animated.spring(scale, { toValue: 1, tension: 150, friction: 8, useNativeDriver: true }).start(), []);
@@ -139,7 +140,7 @@ const Section = React.memo(function Section({
   title, data, cardWidth, cardHeight, onItemPress, variant = "recent", isGrid = false, gridColumns = 2, gridGap = 10
 }) {
   const isTrending = variant === "trending";
-  const isOngoing  = variant === "ongoing";
+  const isOngoing = variant === "ongoing";
 
   if (isGrid) {
     return (
@@ -148,21 +149,21 @@ const Section = React.memo(function Section({
           <View style={[styles.sectionAccent, isTrending && styles.sectionAccentTrending]} />
           <Text style={styles.sectionTitle}>{title}</Text>
         </View>
-        <View style={{ 
-          flexDirection: "row", 
-          flexWrap: "wrap", 
-          paddingHorizontal: 15, 
-          columnGap: gridGap, 
-          rowGap: isOngoing ? 0 : gridGap 
+        <View style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          paddingHorizontal: 15,
+          columnGap: gridGap,
+          rowGap: isOngoing ? 0 : gridGap
         }}>
           {data.map((item, index) => (
             isOngoing ? (
-              <OngoingCard 
+              <OngoingCard
                 key={`ongoing-${item.slug || index}`}
                 item={item}
                 onPress={onItemPress}
                 index={index}
-                width={gridColumns > 2 ? (cardWidth * 2) + gridGap : (cardWidth * 2) + 20} 
+                width={gridColumns > 2 ? (cardWidth * 2) + gridGap : (cardWidth * 2) + 20}
               />
             ) : (
               <AnimeCard
@@ -229,7 +230,7 @@ const SHIMMER_LOCATIONS = [0, 0.2, 0.5, 0.8, 1];
 
 function ShimmerCard({ cardWidth, cardHeight, shimmerX }) {
   const translateX = shimmerX.interpolate({
-    inputRange:  [0, 1],
+    inputRange: [0, 1],
     outputRange: [-cardWidth, cardWidth * 2],
   });
   const shimmerOpacity = shimmerX.interpolate({
@@ -314,51 +315,51 @@ const shimStyles = StyleSheet.create({
 });
 
 // ─── HOME SCREEN ──────────────────────────────────────────────────────────────
+// Module-level Set — persists across HomeScreen remounts so a Stripe session_id
+// that was already routed to SubscriptionSuccess is never processed a second time.
+const _handledSessionIds = new Set();
+
 export default function HomeScreen({ navigation }) {
   const { width } = useWindowDimensions();
   const { user, refreshSession } = useAuth();
 
   // ─── STATE ─────────────────────────────────────────────────────────────────
-  const [query,           setQuery]           = useState("");
-  const [showSuccess,     setShowSuccess]     = useState(false);
-  const [isSyncing,       setIsSyncing]       = useState(false);
+  const [query, setQuery] = useState("");
 
   const avatarLetter = user?.email?.[0]?.toUpperCase() || "?";
   const navAvatar = user?.profile_image ?? null;
   const profileBorder = user?.profile_border ?? null;
 
-  const [anime,           setAnime]           = useState([]);
-  const [continueWatching,setContinueWatching]= useState([]);
-  const [recent,          setRecent]          = useState([]);
-  const [ongoing,         setOngoing]         = useState([]);
-  const [trending,        setTrending]        = useState([]);
-  const [spotlight,       setSpotlight]       = useState([]);
-  const [genres,          setGenres]          = useState([]);
-  const [suggestions,     setSuggestions]     = useState([]);
-  const [suggestLoading,  setSuggestLoading]  = useState(false);
-  const [refreshing,      setRefreshing]      = useState(false);
-  const [heroIndex,       setHeroIndex]       = useState(0);
-  const [error,           setError]           = useState(null);
+  const [anime, setAnime] = useState([]);
+  const [continueWatching, setContinueWatching] = useState([]);
+  const [recent, setRecent] = useState([]);
+  const [ongoing, setOngoing] = useState([]);
+  const [trending, setTrending] = useState([]);
+  const [spotlight, setSpotlight] = useState([]);
+  const [genres, setGenres] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [error, setError] = useState(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [sectionsLoading, setSectionsLoading] = useState(true);
-  const [playerLoading,   setPlayerLoading]   = useState(false);
-  
-  const [searchPage,      setSearchPage]      = useState(1);
-  const [searchHasNext,   setSearchHasNext]   = useState(false);
-  const [searchLoading,   setSearchLoading]   = useState(false);
-  const [unreadCount,     setUnreadCount]     = useState(0);
-  const [mobileMenuOpen,  setMobileMenuOpen]  = useState(false); // 📱 Mobile Menu State
+  const [playerLoading, setPlayerLoading] = useState(false);
 
-  const scrollY      = useRef(new Animated.Value(0)).current;
-  const heroScrollX  = useRef(new Animated.Value(0)).current; // 📏 Track hero scroll position
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchHasNext, setSearchHasNext] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // 📱 Mobile Menu State
+
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const heroScrollX = useRef(new Animated.Value(0)).current; // 📏 Track hero scroll position
   const dropdownAnim = useRef(new Animated.Value(0)).current;
-  const heroPulse    = useRef(new Animated.Value(1)).current;
-  const logoPulse    = useRef(new Animated.Value(1)).current;
-  const searchFocus  = useRef(new Animated.Value(0)).current;
+  const heroPulse = useRef(new Animated.Value(1)).current;
+  const logoPulse = useRef(new Animated.Value(1)).current;
+  const searchFocus = useRef(new Animated.Value(0)).current;
   const lastSearchRef = useRef({ query: "", results: [] });
   const shimmerX = useRef(new Animated.Value(0)).current;
-  const sessionIdRef = useRef(null); // 💳 Store Stripe Session ID
-
   // ─── LOGIN & PAYMENT REDIRECT BRIDGE ───────────────────────────────────────
   useEffect(() => {
     (async () => {
@@ -369,59 +370,41 @@ export default function HomeScreen({ navigation }) {
         navigation.navigate("Subscription");
         return;
       }
-
-      // 2. Check for successful payment return parameter (Web)
-      if (Platform.OS === "web") {
-         const params = new URLSearchParams(window.location.search);
-         if (params.get("success") === "true") {
-            const sid = params.get("session_id");
-            if (sid) sessionIdRef.current = sid;
-            
-            setShowSuccess(true);
-            setIsSyncing(true);
-            window.history.replaceState({}, document.title, "/");
-         }
-      }
     })();
+
+    // 2. Stripe Deep Link Fallback (Expo Go workaround)
+    // Manually parse the URL to catch the session_id if React Navigation linking fails dynamically.
+    // IMPORTANT: We track handled session IDs in a module-level Set so that when
+    // navigation.replace("Home") re-mounts HomeScreen after payment, getInitialURL()
+    // still returns the old stripe URL — without this guard it would redirect back to
+    // SubscriptionSuccess and reset the "Verifying Payment" screen.
+    const handleUrl = (url) => {
+      if (!url) return;
+      if (url.includes("subscription-success") && url.includes("session_id=")) {
+        const match = url.match(/[?&]session_id=([^&]+)/);
+        if (match && match[1]) {
+          const sessionId = match[1];
+          // Only navigate if this session hasn't been handled yet
+          if (!_handledSessionIds.has(sessionId)) {
+            _handledSessionIds.add(sessionId);
+            navigation.navigate("SubscriptionSuccess", { session_id: sessionId });
+          }
+        }
+      }
+    };
+
+    ExpoLinking.getInitialURL().then(handleUrl);
+    const linkingSub = ExpoLinking.addEventListener("url", (event) => handleUrl(event.url));
+
+    return () => {
+      if (linkingSub && linkingSub.remove) {
+        linkingSub.remove();
+      }
+    };
   }, [navigation]);
 
-  useEffect(() => {
-     let interval;
-     if (showSuccess && isSyncing && user?.subscription !== "premium") {
-        interval = setInterval(async () => {
-           console.log("[Sync] Checking for Premium upgrade...");
-           
-           // 1. Try Direct Sync Fallback first if we have a sessionId
-           if (sessionIdRef.current) {
-              try {
-                const res = await API.get(`/api/payments/sync-session/${sessionIdRef.current}`);
-                if (res.data.success && res.data.subscription === "premium") {
-                   console.log("[Sync] Direct Sync SUCCESS! Upgrade detected.");
-                   await refreshSession(); // Full context update
-                   setIsSyncing(false);
-                   clearInterval(interval);
-                   return;
-                }
-              } catch (e) {
-                console.warn("[Sync] Direct fallback failed, waiting for webhook...", e.message);
-              }
-           }
-
-           // 2. Standard Webhook Wait (Refresh profile)
-           const fresh = await refreshSession();
-           if (fresh?.subscription === "premium") {
-              setIsSyncing(false);
-              clearInterval(interval);
-           }
-        }, 2500);
-     } else if (user?.subscription === "premium") {
-        setIsSyncing(false);
-     }
-     return () => clearInterval(interval);
-  }, [showSuccess, isSyncing, user?.subscription, refreshSession]);
-
   const heroHeight = useMemo(() => getHeroHeight(width), [width]);
-  
+
   const gridColumns = width >= 1200 ? 6 : width >= 992 ? 5 : width >= 768 ? 4 : 2;
   const gridGap = 10;
   const gridCardWidth = (width - 32 - (gridColumns - 1) * gridGap) / gridColumns;
@@ -451,7 +434,7 @@ export default function HomeScreen({ navigation }) {
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(logoPulse, { toValue: 1.04, duration: 1800, useNativeDriver: true }),
-        Animated.timing(logoPulse, { toValue: 1,    duration: 1800, useNativeDriver: true }),
+        Animated.timing(logoPulse, { toValue: 1, duration: 1800, useNativeDriver: true }),
       ])
     );
     anim.start();
@@ -496,7 +479,7 @@ export default function HomeScreen({ navigation }) {
               })));
             }
           })
-          .catch(() => {});
+          .catch(() => { });
 
         // 2. Fetch Notifications Badge
         NotificationApi.getNotifications().then(res => {
@@ -519,7 +502,7 @@ export default function HomeScreen({ navigation }) {
         cachedGet("/api/anime/spotlight", 60_000).catch(() => null),
         cachedGet("/api/anime/ongoing?page=1", 3600_000).catch(() => null)
       ]);
-      
+
       if (recentRes?.data?.success && recentRes.data.episodes) setRecent(recentRes.data.episodes);
       if (ongoingRes?.data?.success && ongoingRes.data.series) setOngoing(ongoingRes.data.series);
       if (popularRes?.data?.success && popularRes.data.results) setTrending(popularRes.data.results);
@@ -633,7 +616,7 @@ export default function HomeScreen({ navigation }) {
 
   const getAnimeId = useCallback((item) => {
     if (item.slug) return item.slug;
-    if (item.id)   return item.id;
+    if (item.id) return item.id;
     if (item.url) {
       const parts = item.url.split("/");
       return parts[parts.length - 1];
@@ -703,8 +686,8 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   const dropdownTranslateY = dropdownAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] });
-  const dropdownOpacity    = dropdownAnim;
-  const dropdownScale      = dropdownAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
+  const dropdownOpacity = dropdownAnim;
+  const dropdownScale = dropdownAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
 
   // ── RENDER ───────────────────────────────────────────────────────────────────
   return (
@@ -728,129 +711,129 @@ export default function HomeScreen({ navigation }) {
           {width >= 768 ? (
             <>
               <View style={styles.searchContainer}>
-            <Animated.View style={[
-              styles.searchWrapper,
-              {
-                width: width >= 768 ? 280 : 210,
-              }
-            ]}>
-              {suggestLoading
-                ? <DotCircleLoader size={18} color={C.crimson} />
-                : <Ionicons name="search" size={16} color={C.dim} style={styles.searchIcon} />
-              }
-              <TextInput
-                value={query}
-                onChangeText={(text) => {
-                  setQuery(text);
-                  if (!text) clearSearch();
-                }}
-                placeholder="Search anime…"
-                placeholderTextColor={C.dimmer}
-                style={[styles.searchInput, { paddingVertical: 0 }]}
-                returnKeyType="search"
-                onFocus={() => {
-                  if (suggestions.length > 0) setShowSuggestions(true);
-                }}
-                onBlur={() => {
-                  setTimeout(() => setShowSuggestions(false), 150);
-                }}
-                onSubmitEditing={() => { searchAnime(query.trim()); setShowSuggestions(false); }}
-              />
-              {query.length > 0 && (
+                <Animated.View style={[
+                  styles.searchWrapper,
+                  {
+                    width: width >= 768 ? 280 : 210,
+                  }
+                ]}>
+                  {suggestLoading
+                    ? <DotCircleLoader size={18} color={C.crimson} />
+                    : <Ionicons name="search" size={16} color={C.dim} style={styles.searchIcon} />
+                  }
+                  <TextInput
+                    value={query}
+                    onChangeText={(text) => {
+                      setQuery(text);
+                      if (!text) clearSearch();
+                    }}
+                    placeholder="Search anime…"
+                    placeholderTextColor={C.dimmer}
+                    style={[styles.searchInput, { paddingVertical: 0 }]}
+                    returnKeyType="search"
+                    onFocus={() => {
+                      if (suggestions.length > 0) setShowSuggestions(true);
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => setShowSuggestions(false), 150);
+                    }}
+                    onSubmitEditing={() => { searchAnime(query.trim()); setShowSuggestions(false); }}
+                  />
+                  {query.length > 0 && (
+                    <TouchableOpacity
+                      onPress={clearSearch}
+                      style={styles.clearButton}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={16} color={C.dim} />
+                    </TouchableOpacity>
+                  )}
+                </Animated.View>
+
+                {/* ── INLINE SUGGESTIONS DROPDOWN ── */}
+                {showSuggestions && suggestions.length > 0 && (
+                  <Animated.View style={[
+                    styles.suggestionsDropdown,
+                    { width: width >= 768 ? 280 : 210 },
+                    {
+                      opacity: dropdownOpacity,
+                      transform: [{ translateY: dropdownTranslateY }, { scale: dropdownScale }],
+                    }
+                  ]}>
+                    <View style={styles.dropdownAccentLine} />
+                    <View style={styles.dropdownHeader}>
+                      <Text style={styles.dropdownHeaderText}>Results ({suggestions.length})</Text>
+                      <TouchableOpacity onPress={() => setShowSuggestions(false)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Ionicons name="close" size={14} color={C.dim} />
+                      </TouchableOpacity>
+                    </View>
+                    <ScrollView
+                      style={{ maxHeight: 320 }}
+                      keyboardShouldPersistTaps="handled"
+                      showsVerticalScrollIndicator={false}
+                      nestedScrollEnabled
+                    >
+                      {suggestions.map((item, index) => (
+                        <SuggestionItem
+                          key={`dd-${item.slug || item.id || index}`}
+                          item={item}
+                          index={index}
+                          onPress={(it) => { handleSuggestionSelect(it); setShowSuggestions(false); }}
+                        />
+                      ))}
+                    </ScrollView>
+                  </Animated.View>
+                )}
+              </View>
+
+              <View style={styles.navRight}>
                 <TouchableOpacity
-                  onPress={clearSearch}
-                  style={styles.clearButton}
+                  onPress={() => navigation.navigate("Notifications")}
+                  style={styles.navIconBtn}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="close-circle" size={16} color={C.dim} />
+                  <Ionicons name="notifications-outline" size={22} color={C.white} />
+                  {unreadCount > 0 && (
+                    <View style={styles.notifBadge}>
+                      <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
-              )}
-            </Animated.View>
 
-            {/* ── INLINE SUGGESTIONS DROPDOWN ── */}
-            {showSuggestions && suggestions.length > 0 && (
-              <Animated.View style={[
-                styles.suggestionsDropdown,
-                { width: width >= 768 ? 280 : 210 },
-                {
-                  opacity: dropdownOpacity,
-                  transform: [{ translateY: dropdownTranslateY }, { scale: dropdownScale }],
-                }
-              ]}>
-                <View style={styles.dropdownAccentLine} />
-                <View style={styles.dropdownHeader}>
-                  <Text style={styles.dropdownHeaderText}>Results ({suggestions.length})</Text>
-                  <TouchableOpacity onPress={() => setShowSuggestions(false)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <Ionicons name="close" size={14} color={C.dim} />
-                  </TouchableOpacity>
-                </View>
-                <ScrollView
-                  style={{ maxHeight: 320 }}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("Profile")}
+                  style={styles.avatarBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  {suggestions.map((item, index) => (
-                    <SuggestionItem
-                      key={`dd-${item.slug || item.id || index}`}
-                      item={item}
-                      index={index}
-                      onPress={(it) => { handleSuggestionSelect(it); setShowSuggestions(false); }}
-                    />
-                  ))}
-                </ScrollView>
-              </Animated.View>
-            )}
-          </View>
-
-          <View style={styles.navRight}>
+                  <PremiumBorder borderStyle={profileBorder} size={32} borderWidth={2}>
+                    <View style={styles.avatarCircle}>
+                      {navAvatar ? (
+                        <Image source={{ uri: navAvatar }} style={styles.avatarImageInside} contentFit="cover" />
+                      ) : (
+                        <LinearGradient colors={["rgba(255,255,255,0.12)", "rgba(255,255,255,0.05)"]} style={styles.avatarCircle}>
+                          <Text style={styles.avatarLetter}>{avatarLetter}</Text>
+                        </LinearGradient>
+                      )}
+                    </View>
+                  </PremiumBorder>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
             <TouchableOpacity
-              onPress={() => navigation.navigate("Notifications")}
+              onPress={() => setMobileMenuOpen(!mobileMenuOpen)}
               style={styles.navIconBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
             >
-              <Ionicons name="notifications-outline" size={22} color={C.white} />
-              {unreadCount > 0 && (
+              <Ionicons name={mobileMenuOpen ? "close" : "menu"} size={28} color={C.white} />
+              {unreadCount > 0 && !mobileMenuOpen && (
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => navigation.navigate("Profile")}
-              style={styles.avatarBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <PremiumBorder borderStyle={profileBorder} size={32} borderWidth={2}>
-                <View style={styles.avatarCircle}>
-                  {navAvatar ? (
-                    <Image source={{ uri: navAvatar }} style={styles.avatarImageInside} contentFit="cover" />
-                  ) : (
-                    <LinearGradient colors={["rgba(255,255,255,0.12)", "rgba(255,255,255,0.05)"]} style={styles.avatarCircle}>
-                      <Text style={styles.avatarLetter}>{avatarLetter}</Text>
-                    </LinearGradient>
-                  )}
-                </View>
-              </PremiumBorder>
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        <TouchableOpacity
-          onPress={() => setMobileMenuOpen(!mobileMenuOpen)}
-          style={styles.navIconBtn}
-          activeOpacity={0.7}
-        >
-          <Ionicons name={mobileMenuOpen ? "close" : "menu"} size={28} color={C.white} />
-          {unreadCount > 0 && !mobileMenuOpen && (
-            <View style={styles.notifBadge}>
-              <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-            </View>
           )}
-        </TouchableOpacity>
-      )}
-    </View>
+        </View>
 
         {/* ── MOBILE MENU DROPDOWN ── */}
         {width < 768 && mobileMenuOpen && (
@@ -989,103 +972,103 @@ export default function HomeScreen({ navigation }) {
               renderItem={({ item }) => (
                 <View style={{ width: width - 32, height: heroHeight, justifyContent: "center", alignItems: "center" }}>
                   <View style={{ width: "100%", height: heroHeight, borderRadius: 6, overflow: "hidden", position: "relative" }}>
-                  {/* Background Layer (Visual) */}
-                  <Image
-                    source={{ uri: item.background || item.image }}
-                    style={StyleSheet.absoluteFill}
-                    contentFit="cover"
-                    priority="high"
-                    transition={400}
-                  />
-                  <BlurView intensity={Platform.OS === 'web' ? 40 : 25} tint="dark" style={StyleSheet.absoluteFill} />
-                  <LinearGradient
-                    colors={["rgba(8,8,9,0.25)", "rgba(8,8,9,0.92)"]}
-                    style={StyleSheet.absoluteFill}
-                  />
+                    {/* Background Layer (Visual) */}
+                    <Image
+                      source={{ uri: item.background || item.image }}
+                      style={StyleSheet.absoluteFill}
+                      contentFit="cover"
+                      priority="high"
+                      transition={400}
+                    />
+                    <BlurView intensity={Platform.OS === 'web' ? 40 : 25} tint="dark" style={StyleSheet.absoluteFill} />
+                    <LinearGradient
+                      colors={["rgba(8,8,9,0.25)", "rgba(8,8,9,0.92)"]}
+                      style={StyleSheet.absoluteFill}
+                    />
 
-                  {/* Content Layer (Foreground) */}
-                  <View style={[styles.heroSplitContent, {
-                    flexDirection: width >= 768 ? "row" : "column-reverse",
-                    alignItems: "center",
-                    justifyContent: width >= 768 ? "center" : "flex-end",
-                    paddingTop: width >= 768 ? 20 : 40,
-                  }]}>
-                    {/* Left side: Info (Bottom on mobile) */}
-                    <View style={[styles.heroLeftCol, {
-                      marginRight: width >= 768 ? 16 : 0,
-                      alignItems: width >= 768 ? "flex-start" : "center",
-                      marginTop: width >= 768 ? 0 : 20,
+                    {/* Content Layer (Foreground) */}
+                    <View style={[styles.heroSplitContent, {
+                      flexDirection: width >= 768 ? "row" : "column-reverse",
+                      alignItems: "center",
+                      justifyContent: width >= 768 ? "center" : "flex-end",
+                      paddingTop: width >= 768 ? 20 : 40,
                     }]}>
-                      <View style={styles.spotlightBadge}>
-                        <Text style={styles.spotlightBadgeText}>{item.rank || "#1 SPOTLIGHT"}</Text>
-                      </View>
-                      <Text 
-                        style={[styles.heroSpotlightTitle, { 
-                          fontSize: width >= 768 ? 32 : 24,
-                          textAlign: width >= 768 ? "left" : "center"
-                        }]} 
-                        numberOfLines={2}
-                      >
-                        {item.title}
-                      </Text>
-
-                      {/* HERO GENRES */}
-                      {item.genres && item.genres.length > 0 && (
-                        <View style={[styles.heroGenreRow, { justifyContent: width >= 768 ? "flex-start" : "center" }]}>
-                          {item.genres.slice(0, width >= 768 ? 10 : 3).map((g, i) => (
-                            <View key={i} style={[styles.heroGenrePill, { borderColor: C.crimson + "60", backgroundColor: "rgba(220,20,60,0.12)" }]}>
-                              <Text style={[styles.heroGenreText, { color: C.white }]}>{g}</Text>
-                            </View>
-                          ))}
+                      {/* Left side: Info (Bottom on mobile) */}
+                      <View style={[styles.heroLeftCol, {
+                        marginRight: width >= 768 ? 16 : 0,
+                        alignItems: width >= 768 ? "flex-start" : "center",
+                        marginTop: width >= 768 ? 0 : 20,
+                      }]}>
+                        <View style={styles.spotlightBadge}>
+                          <Text style={styles.spotlightBadgeText}>{item.rank || "#1 SPOTLIGHT"}</Text>
                         </View>
-                      )}
-                      
-                      {/* Hide description on mobile to keep the layout cinematic and clean */}
-                      {width >= 768 && (
-                        <Text style={styles.heroSpotlightDescription} numberOfLines={3}>
-                          {item.description || "No description available for this featured spotlight."}
+                        <Text
+                          style={[styles.heroSpotlightTitle, {
+                            fontSize: width >= 768 ? 32 : 24,
+                            textAlign: width >= 768 ? "left" : "center"
+                          }]}
+                          numberOfLines={2}
+                        >
+                          {item.title}
                         </Text>
-                      )}
-                      
-                      <View style={[styles.heroSpotlightActions, { marginTop: width >= 768 ? 0 : 8 }]}>
-                        <TouchableOpacity 
-                          style={styles.heroBtnSolid} 
-                          onPress={() => handleHeroPress(item, true)}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="play" size={18} color="#000" />
-                          <Text style={styles.heroBtnSolidText}>Watch Now</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.heroBtnOutline} 
-                          onPress={() => handleHeroPress(item, false)}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="information-circle-outline" size={18} color={C.white} />
-                          <Text style={styles.heroBtnOutlineText}>Details</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
 
-                    {/* Right side: Floating Poster (Top on mobile) */}
-                    <View style={[styles.heroRightCol, {
-                      width: width >= 768 ? "26%" : 140,
-                      height: width >= 768 ? "70%" : 190,
-                      alignSelf: width >= 768 ? "auto" : "center",
-                    }]}>
-                      <Image 
-                        source={{ uri: item.poster || item.image }} 
-                        style={styles.heroPoster} 
-                        contentFit="cover"
-                        transition={500}
-                      />
-                    </View>
+                        {/* HERO GENRES */}
+                        {item.genres && item.genres.length > 0 && (
+                          <View style={[styles.heroGenreRow, { justifyContent: width >= 768 ? "flex-start" : "center" }]}>
+                            {item.genres.slice(0, width >= 768 ? 10 : 3).map((g, i) => (
+                              <View key={i} style={[styles.heroGenrePill, { borderColor: C.crimson + "60", backgroundColor: "rgba(220,20,60,0.12)" }]}>
+                                <Text style={[styles.heroGenreText, { color: C.white }]}>{g}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+
+                        {/* Hide description on mobile to keep the layout cinematic and clean */}
+                        {width >= 768 && (
+                          <Text style={styles.heroSpotlightDescription} numberOfLines={3}>
+                            {item.description || "No description available for this featured spotlight."}
+                          </Text>
+                        )}
+
+                        <View style={[styles.heroSpotlightActions, { marginTop: width >= 768 ? 0 : 8 }]}>
+                          <TouchableOpacity
+                            style={styles.heroBtnSolid}
+                            onPress={() => handleHeroPress(item, true)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="play" size={18} color="#000" />
+                            <Text style={styles.heroBtnSolidText}>Watch Now</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.heroBtnOutline}
+                            onPress={() => handleHeroPress(item, false)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="information-circle-outline" size={18} color={C.white} />
+                            <Text style={styles.heroBtnOutlineText}>Details</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      {/* Right side: Floating Poster (Top on mobile) */}
+                      <View style={[styles.heroRightCol, {
+                        width: width >= 768 ? "26%" : 140,
+                        height: width >= 768 ? "70%" : 190,
+                        alignSelf: width >= 768 ? "auto" : "center",
+                      }]}>
+                        <Image
+                          source={{ uri: item.poster || item.image }}
+                          style={styles.heroPoster}
+                          contentFit="cover"
+                          transition={500}
+                        />
+                      </View>
                     </View>
                   </View>
                 </View>
               )}
             />
-            
+
             {/* Top-Right Pagination Bullets */}
             <View style={styles.heroPaginationBox}>
               {spotlight.slice(0, 6).map((_, i) => {
@@ -1102,13 +1085,13 @@ export default function HomeScreen({ navigation }) {
                 });
 
                 return (
-                  <TouchableOpacity 
-                    key={i} 
+                  <TouchableOpacity
+                    key={i}
                     onPress={() => {
                       setHeroIndex(i);
                       heroFlatListRef.current?.scrollToIndex({ index: i, animated: true });
                     }}
-                    style={styles.heroBulletWrapper} 
+                    style={styles.heroBulletWrapper}
                   >
                     <Animated.View style={[
                       styles.heroBulletBase,
@@ -1152,12 +1135,12 @@ export default function HomeScreen({ navigation }) {
                 />
               ))}
             </View>
-            
+
             {/* ── PAGINATION CONTROLS ── */}
             <View style={styles.paginationRow}>
               {searchPage > 1 && (
-                <TouchableOpacity 
-                  style={styles.pageBtn} 
+                <TouchableOpacity
+                  style={styles.pageBtn}
                   onPress={() => searchAnime(query, searchPage - 1)}
                   disabled={searchLoading}
                 >
@@ -1172,7 +1155,7 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.pageNumberText}>{searchPage - 1}</Text>
                   </TouchableOpacity>
                 )}
-                
+
                 <View style={[styles.pageNumberBtn, styles.pageNumberBtnActive]}>
                   {searchLoading ? (
                     <DotCircleLoader size={18} color={C.white} />
@@ -1189,8 +1172,8 @@ export default function HomeScreen({ navigation }) {
               </View>
 
               {searchHasNext && (
-                <TouchableOpacity 
-                  style={styles.pageBtn} 
+                <TouchableOpacity
+                  style={styles.pageBtn}
                   onPress={() => searchAnime(query, searchPage + 1)}
                   disabled={searchLoading}
                 >
@@ -1312,33 +1295,6 @@ export default function HomeScreen({ navigation }) {
         <AppFooter />
       </Animated.ScrollView>
 
-      {/* ── SUCCESS MODAL ── */}
-      {showSuccess && (
-        <View style={styles.modalOverlay}>
-          <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
-          <Animated.View style={styles.modalCard}>
-            <View style={styles.modalIcon}>
-               <Ionicons name={isSyncing ? "sync" : "checkmark-circle"} size={48} color={isSyncing ? C.dim : "#eab308"} />
-            </View>
-            <Text style={styles.modalTitle}>
-               {isSyncing ? "Activating Premium..." : "Subscription Active! 🛡️✨"}
-            </Text>
-            <Text style={styles.modalText}>
-               {isSyncing 
-                 ? "We're just confirming your payment with Stripe. One moment..."
-                 : "Thank you for supporting Animexis! Your Premium benefits are now active. Enjoy your unlimited, ad-free journey through the world of anime. 🍿🎬"
-               }
-            </Text>
-            
-            {!isSyncing && (
-              <TouchableOpacity style={styles.modalBtn} onPress={() => setShowSuccess(false)}>
-                <Text style={styles.modalBtnText}>Start Watching 🚀</Text>
-              </TouchableOpacity>
-            )}
-          </Animated.View>
-        </View>
-      )}
-
       {playerLoading && (
         <View style={styles.loadingOverlay}>
           <DotCircleLoader size={54} color={C.crimson} />
@@ -1457,16 +1413,16 @@ const styles = StyleSheet.create({
   heroLeftCol: { flex: 1, marginRight: 16, justifyContent: "center" },
   heroRightCol: { width: "26%", height: "70%", borderRadius: 6, overflow: "hidden", elevation: 12 },
   heroPoster: { width: "100%", height: "100%", borderRadius: 6, borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
-  
+
   spotlightBadge: {
     backgroundColor: C.crimson,
     paddingHorizontal: 10, paddingVertical: 4,
     borderRadius: 6, marginBottom: 12, alignSelf: "flex-start",
   },
   spotlightBadgeText: { color: C.white, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
-  
+
   heroSpotlightTitle: { color: C.white, fontWeight: "900", marginBottom: 6, textShadowColor: "rgba(0,0,0,0.5)", textShadowRadius: 8 },
-  
+
   heroGenreRow: { flexDirection: "row", gap: 6, marginBottom: 14, flexWrap: "wrap" },
   heroGenrePill: {
     paddingHorizontal: 8, paddingVertical: 3,
@@ -1476,7 +1432,7 @@ const styles = StyleSheet.create({
   heroGenreText: { fontSize: 10, fontWeight: "700", opacity: 0.95 },
 
   heroSpotlightDescription: { color: "rgba(255,255,255,0.7)", fontSize: 12, lineHeight: 18, marginBottom: 20 },
-  
+
   heroSpotlightActions: { flexDirection: "row", gap: 10 },
   heroBtnSolid: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -1489,7 +1445,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8,
   },
   heroBtnOutlineText: { color: C.white, fontWeight: "700", fontSize: 13 },
-  
+
   heroPaginationBox: { position: "absolute", top: 16, right: 24, flexDirection: "row", gap: 8, alignItems: "center" },
   heroBulletWrapper: { paddingHorizontal: 2, height: 12, justifyContent: "center" },
   heroBulletBase: { height: 6, borderRadius: 3, backgroundColor: "#FFF" },
@@ -1549,7 +1505,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   cardEpisodeText: { color: C.white, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
-  
+
   cardTypeBadge: {
     position: "absolute", bottom: 0, right: 0,
     backgroundColor: C.white, // Was Anitaku Yellow/Orange
@@ -1614,7 +1570,7 @@ const styles = StyleSheet.create({
   },
   avatarImageInside: { width: '100%', height: '100%' },
   avatarLetter: { color: C.white, fontSize: 15, fontWeight: "800" },
-  
+
   // ── Ongoing Card Styles ──
   ongoingCard: {
     flexDirection: "row",
@@ -1694,7 +1650,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
   },
   trendingBadgeText: { color: C.dim, fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
-  
+
   // 🏆 Success Modal Styles
   modalOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1734,21 +1690,21 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
   },
   searchBadgeText: { color: C.dim, fontSize: 10, fontWeight: "600" },
-  
+
   // ── Navbar & Navigation ──
   navContent: {
-    flex: 1, 
-    flexDirection: "row", 
-    alignItems: "center", 
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     zIndex: 10,
   },
-  
+
   // 📱 Mobile Menu Styles
   mobileMenuDropdown: {
     position: 'absolute',
-    top: 60, // Sits below the navbar content
+    top: 86, // Sits perfectly below the navbar content
     left: 16,
     right: 16,
     backgroundColor: C.surfaceHigh,
@@ -1802,15 +1758,15 @@ const styles = StyleSheet.create({
   },
   navRight: { flexDirection: "row", alignItems: "center", gap: 12 },
   navIconBtn: { position: "relative", width: 36, height: 36, justifyContent: "center", alignItems: "center" },
-  notifBadge: { 
-    position: "absolute", 
-    top: 2, 
-    right: 2, 
-    backgroundColor: C.crimson, 
-    borderRadius: 8, 
-    minWidth: 16, 
-    height: 16, 
-    justifyContent: "center", 
+  notifBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    backgroundColor: C.crimson,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 3,
     borderWidth: 2,

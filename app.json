@@ -2,6 +2,7 @@
   "expo": {
     "name": "animexisv1",
     "slug": "animexisv1",
+    "scheme": "animexis",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",

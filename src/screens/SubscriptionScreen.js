@@ -9,6 +9,7 @@ import {
   Linking,
   Platform,
 } from "react-native";
+import * as ExpoLinking from "expo-linking";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
@@ -27,8 +28,17 @@ export default function SubscriptionScreen({ navigation }) {
     setLoading(true);
 
     try {
+      const successUrl = Platform.OS === "web" 
+        ? `${window.location.origin}/subscription-success`
+        : ExpoLinking.createURL("subscription-success");
+      const cancelUrl = Platform.OS === "web"
+        ? `${window.location.origin}/`
+        : ExpoLinking.createURL("");
+
       const res = await API.post("/api/payments/create-checkout-session", {
         priceId: process.env.EXPO_PUBLIC_STRIPE_PREMIUM_PRICE_ID || "price_default", // Configured in .env
+        successUrl,
+        cancelUrl,
       });
 
       if (res.data.success && res.data.url) {

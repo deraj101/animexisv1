@@ -365,7 +365,7 @@ export default function ProfileScreen({ navigation }) {
   }, [user?.email]);
 
   const handleSelectBorder = useCallback(async (borderId) => {
-    if (usage.subscription !== 'premium') {
+    if (user?.subscription !== 'premium') {
       Alert.alert("Premium Feature", "Animated borders are exclusive to Premium members. Upgrade to get this perk! 🌟");
       return;
     }
@@ -380,7 +380,7 @@ export default function ProfileScreen({ navigation }) {
     } finally {
       setBorderSaving(false);
     }
-  }, [user?.email, profileBorder, usage.subscription]);
+  }, [user?.email, profileBorder, user?.subscription]);
 
   const handleRemoveAvatar = useCallback(async () => {
     const confirmed = Platform.OS === "web"
@@ -633,7 +633,7 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.heroEmail}>{user?.email}</Text>
 
             <View style={[styles.heroBadgeRow, { flexWrap: "wrap", justifyContent: "center" }]}>
-              {usage.subscription === 'premium' ? (
+              {user?.subscription === 'premium' ? (
                 <View style={[styles.heroBadgePill, { borderColor: '#eab308' }]}>
                   <Ionicons name="star" size={12} color="#eab308" />
                   <Text style={[styles.heroBadgeText, { color: '#eab308' }]}>Premium Member</Text>

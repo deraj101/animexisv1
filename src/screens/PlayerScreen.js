@@ -27,33 +27,33 @@ import DotCircleLoader from "../components/DotCircleLoader";
 let Svg, Circle;
 try {
   const rnsvg = require("react-native-svg");
-  Svg    = rnsvg.Svg;
+  Svg = rnsvg.Svg;
   Circle = rnsvg.Circle;
 } catch { /* not installed — CountdownRing falls back to plain box */ }
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const C = {
-  bg:           "#080808",
-  surface:      "#101010",
-  surfaceHigh:  "#1a1a1a",
-  accent:       "#FFFFFF",
-  accentDim:    "rgba(255,255,255,0.07)",
+  bg: "#080808",
+  surface: "#101010",
+  surfaceHigh: "#1a1a1a",
+  accent: "#FFFFFF",
+  accentDim: "rgba(255,255,255,0.07)",
   accentBorder: "rgba(255,255,255,0.18)",
-  white:        "#FFFFFF",
-  dim:          "#888888",
-  border:       "rgba(255,255,255,0.07)",
-  modalBorder:  "#1a1a1a",
-  primary:      "#FFFFFF",
-  primaryDim:   "rgba(255,255,255,0.07)",
-  primaryBorder:"rgba(255,255,255,0.18)",
+  white: "#FFFFFF",
+  dim: "#888888",
+  border: "rgba(255,255,255,0.07)",
+  modalBorder: "#1a1a1a",
+  primary: "#FFFFFF",
+  primaryDim: "rgba(255,255,255,0.07)",
+  primaryBorder: "rgba(255,255,255,0.18)",
 };
 
 // ─── AD CONFIG ────────────────────────────────────────────────────────────────
 const ADS = [
   {
-    url:       `${process.env.EXPO_PUBLIC_API_URL}/api/anime/ad`,
+    url: `${process.env.EXPO_PUBLIC_API_URL}/api/anime/ad`,
     skipAfter: 5,
-    label:     "Ad · animexis.com",
+    label: "Ad · animexis.com",
   },
 ];
 
@@ -66,13 +66,13 @@ const fmtTime = (secs) => {
 };
 
 // ─── COUNTDOWN RING ───────────────────────────────────────────────────────────
-const RING_SIZE   = 52;
+const RING_SIZE = 52;
 const RING_RADIUS = 20;
 const RING_STROKE = 3;
 const CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 function CountdownRing({ remaining, total, onSkip, canSkip }) {
-  const progress   = total > 0 ? remaining / total : 0;
+  const progress = total > 0 ? remaining / total : 0;
   const dashOffset = CIRCUMFERENCE * (1 - progress);
   const cx = RING_SIZE / 2;
   const cy = RING_SIZE / 2;
@@ -95,8 +95,10 @@ function CountdownRing({ remaining, total, onSkip, canSkip }) {
             stroke={canSkip ? "#facc15" : "rgba(255,255,255,0.75)"}
             strokeWidth={RING_STROKE} strokeLinecap="round"
             strokeDasharray={CIRCUMFERENCE} strokeDashoffset={dashOffset}
-            style={{ transform: `rotate(-90deg)`, transformOrigin: `${cx}px ${cy}px`,
-                     transition: "stroke-dashoffset 0.9s linear, stroke 0.3s" }} />
+            style={{
+              transform: `rotate(-90deg)`, transformOrigin: `${cx}px ${cy}px`,
+              transition: "stroke-dashoffset 0.9s linear, stroke 0.3s"
+            }} />
         </svg>
         <View style={adStyles.ringCenter}>
           {canSkip
@@ -155,12 +157,12 @@ function CountdownRing({ remaining, total, onSkip, canSkip }) {
 function AdOverlay({ onAdFinished }) {
   const ad = ADS[0];
   const [countdown, setCountdown] = useState(ad.skipAfter);
-  const [canSkip,   setCanSkip]   = useState(false);
+  const [canSkip, setCanSkip] = useState(false);
   const [adLoading, setAdLoading] = useState(false);
-  const [adError,   setAdError]   = useState(false);
-  const [timeLeft,  setTimeLeft]  = useState(null);
+  const [adError, setAdError] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(null);
   const skipAnim = useRef(new Animated.Value(0)).current;
-  const adRef    = useRef(null);
+  const adRef = useRef(null);
 
   useEffect(() => {
     if (countdown <= 0) {
@@ -172,7 +174,7 @@ function AdOverlay({ onAdFinished }) {
     return () => clearTimeout(t);
   }, [countdown]);
 
-  const handleSkip    = useCallback(() => { if (canSkip) onAdFinished(); }, [canSkip, onAdFinished]);
+  const handleSkip = useCallback(() => { if (canSkip) onAdFinished(); }, [canSkip, onAdFinished]);
   const handleAdError = useCallback(() => { setAdLoading(false); setAdError(true); }, []);
 
   const renderOverlayUI = () => (
@@ -305,7 +307,7 @@ function PlayerControls({
 }
 
 const { width } = Dimensions.get("window");
-const MODAL_W  = Math.min(width - 24, 900);
+const MODAL_W = Math.min(width - 24, 900);
 const PLAYER_H = Math.round(MODAL_W * (9 / 16));
 
 // ─── PLAYER SCREEN ────────────────────────────────────────────────────────────
@@ -314,20 +316,20 @@ export default function PlayerScreen({ route, navigation }) {
   const { user } = useAuth();
 
   const [playerLoading, setPlayerLoading] = useState(true);
-  const [videoUrl,      setVideoUrl]      = useState(null);
-  const [webViewUrl,    setWebViewUrl]    = useState(null);
-  const [useWebView,    setUseWebView]    = useState(false);
-  const [error,         setError]         = useState(null);
-  const [showAd,        setShowAd]        = useState(user?.subscription?.toLowerCase() !== 'premium');
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [webViewUrl, setWebViewUrl] = useState(null);
+  const [useWebView, setUseWebView] = useState(false);
+  const [error, setError] = useState(null);
+  const [showAd, setShowAd] = useState(user?.subscription?.toLowerCase() !== 'premium');
   // Controls visibility state
   const [controlsVisible, setControlsVisible] = useState(false);
 
-  const videoRef       = useRef(null);
-  const cardAnim       = useRef(new Animated.Value(0)).current;
-  const cardScale      = useRef(new Animated.Value(0.93)).current;
-  const controlsAnim   = useRef(new Animated.Value(0)).current;
-  const hideTimerRef   = useRef(null);
-  const watchStartRef  = useRef(null);
+  const videoRef = useRef(null);
+  const cardAnim = useRef(new Animated.Value(0)).current;
+  const cardScale = useRef(new Animated.Value(0.93)).current;
+  const controlsAnim = useRef(new Animated.Value(0)).current;
+  const hideTimerRef = useRef(null);
+  const watchStartRef = useRef(null);
   const wasFinishedRef = useRef(false);
 
   // ── Controls: show → fade in + start auto-hide timer ──────────────────────
@@ -365,7 +367,7 @@ export default function PlayerScreen({ route, navigation }) {
   useEffect(() => {
     if (!showAd && !watchStartRef.current) {
       watchStartRef.current = Date.now();
-      
+
       // 🚀 IMMEDIATE SYNC: Update 'Continue Watching' the moment playback begins
       if (user?.email && animeId) {
         console.log("[Player] Syncing progress immediately...");
@@ -376,7 +378,7 @@ export default function PlayerScreen({ route, navigation }) {
           image: animeImage || "",
           episodeUrl: video,
           episodeNumber: String(episodeNumber || "1")
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
   }, [showAd, user?.email, animeId]);
@@ -396,7 +398,7 @@ export default function PlayerScreen({ route, navigation }) {
           image: animeImage || "",
           episodeUrl: video,
           episodeNumber: String(episodeNumber || "1")
-        }).catch(() => {});
+        }).catch(() => { });
       }
       // Note: episode count is recorded at click-time in DetailsScreen,
       // not here, so it stays in sync with the Redis daily-limit counter.
@@ -444,8 +446,8 @@ export default function PlayerScreen({ route, navigation }) {
   const isVideoFile = (url) => {
     if (!url) return false;
     // Standard video formats + HLS (m3u8)
-    return url.match(/\.(mp4|mkv|webm|ogv|m3u8)$/i) || 
-           [".mp4", ".m3u8", ".mkv", ".webm"].some(ext => url.toLowerCase().includes(ext));
+    return url.match(/\.(mp4|mkv|webm|ogv|m3u8)$/i) ||
+      [".mp4", ".m3u8", ".mkv", ".webm"].some(ext => url.toLowerCase().includes(ext));
   };
 
   const renderTooltip = (btnKey, text) => {
@@ -459,8 +461,8 @@ export default function PlayerScreen({ route, navigation }) {
   };
 
   const isEmbedPage = (url) =>
-    ["vibeplayer","otakuhg","otakuvid","myvidplay","upnvids","gogoanime","gogocdn",
-     "dood","mp4upload","fembed","mcloud","/embed/","/e/","/v/","/player/","/play/","/watch/"]
+    ["vibeplayer", "otakuhg", "otakuvid", "myvidplay", "upnvids", "gogoanime", "gogocdn",
+      "dood", "mp4upload", "fembed", "mcloud", "/embed/", "/e/", "/v/", "/player/", "/play/", "/watch/"]
       .some(p => url.toLowerCase().includes(p));
 
   const buildStreamUrl = (rawUrl) => {
@@ -528,7 +530,7 @@ export default function PlayerScreen({ route, navigation }) {
     if (user?.email && animeId) {
       API.delete("/api/anime/continue-watching", {
         data: { email: user.email, animeId }
-      }).catch(() => {});
+      }).catch(() => { });
     }
     Alert.alert("Success", "This episode has been marked as finished and removed from your Home screen.");
     goBack();
@@ -615,8 +617,8 @@ export default function PlayerScreen({ route, navigation }) {
             onPlaybackStatusUpdate={(status) => {
               if (status.isLoaded && status.durationMillis > 0) {
                 // 🏁 Threshold: Trigger cleanup if reached 98% OR within last 20 seconds
-                const isNearlyFinished = 
-                  status.positionMillis >= status.durationMillis * 0.98 || 
+                const isNearlyFinished =
+                  status.positionMillis >= status.durationMillis * 0.98 ||
                   (status.durationMillis - status.positionMillis) < 20000;
 
                 if ((status.didJustFinish || isNearlyFinished) && !wasFinishedRef.current) {
@@ -625,7 +627,7 @@ export default function PlayerScreen({ route, navigation }) {
                   if (user?.email && animeId) {
                     API.delete("/api/anime/continue-watching", {
                       data: { email: user.email, animeId }
-                    }).catch(() => {});
+                    }).catch(() => { });
                   }
                 }
               }
@@ -664,8 +666,8 @@ export default function PlayerScreen({ route, navigation }) {
           <Text style={styles.cardTitle} numberOfLines={1}>{headerTitle}</Text>
           <View style={styles.headerRight}>
             <View style={styles.iconBtnWrap}>
-              <TouchableOpacity 
-                onPress={() => setShowComments(true)} 
+              <TouchableOpacity
+                onPress={() => setShowComments(true)}
                 style={styles.iconBtn}
                 accessibilityLabel="View Comments"
                 onMouseEnter={() => setHoveredBtn('comments')}
@@ -682,8 +684,8 @@ export default function PlayerScreen({ route, navigation }) {
             </View>
 
             <View style={styles.iconBtnWrap}>
-              <TouchableOpacity 
-                onPress={onMarkFinished} 
+              <TouchableOpacity
+                onPress={onMarkFinished}
                 style={styles.iconBtn}
                 accessibilityLabel="Mark as Finished"
                 onMouseEnter={() => setHoveredBtn('finish')}
@@ -695,8 +697,8 @@ export default function PlayerScreen({ route, navigation }) {
             </View>
 
             <View style={styles.iconBtnWrap}>
-              <TouchableOpacity 
-                onPress={openInBrowser} 
+              <TouchableOpacity
+                onPress={openInBrowser}
                 style={styles.iconBtn}
                 accessibilityLabel="Open in Browser"
                 onMouseEnter={() => setHoveredBtn('browser')}
@@ -739,23 +741,23 @@ export default function PlayerScreen({ route, navigation }) {
         onRequestClose={() => setShowComments(false)}
       >
         <View style={styles.commentsOverlay}>
-          <TouchableOpacity 
-            style={StyleSheet.absoluteFill} 
-            activeOpacity={1} 
-            onPress={() => setShowComments(false)} 
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowComments(false)}
           />
           <View style={styles.commentsCard}>
             <View style={styles.commentsHeader}>
               <Text style={styles.commentsTitle}>Discussion</Text>
-              <TouchableOpacity onPress={() => setShowComments(false)} hitSlop={{top:10,bottom:10,left:10,right:10}}>
+              <TouchableOpacity onPress={() => setShowComments(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={22} color={C.white} />
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-              <CommentSection 
-                animeId={animeId} 
-                episodeNum={episodeNumber} 
-                onCommentAdded={fetchCommentCount} 
+              <CommentSection
+                animeId={animeId}
+                episodeNum={episodeNumber}
+                onCommentAdded={fetchCommentCount}
               />
             </ScrollView>
           </View>
@@ -901,15 +903,15 @@ const styles = StyleSheet.create({
 
   // ── Comments Modal ──
   commentsOverlay: {
-    flex: 1, 
-    justifyContent: "flex-end", 
+    flex: 1,
+    justifyContent: "flex-end",
     backgroundColor: "rgba(0,0,0,0.5)"
   },
   commentsCard: {
     backgroundColor: C.surface,
-    borderTopLeftRadius: 20, 
+    borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "80%", 
+    maxHeight: "80%",
     paddingHorizontal: 18,
     paddingTop: 16,
     paddingBottom: 20,
@@ -917,8 +919,8 @@ const styles = StyleSheet.create({
     borderColor: C.border,
   },
   commentsHeader: {
-    flexDirection: "row", 
-    justifyContent: "space-between", 
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
     paddingBottom: 10,

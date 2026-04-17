@@ -31,6 +31,7 @@ import {
   Animated,
   Platform,
   Linking,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { C } from "../theme";
@@ -181,155 +182,7 @@ const PAGES = {
       },
     ],
   },
-
-  contact: {
-    icon: "mail",
-    title: "Contact Us",
-    lastUpdated: null,
-    sections: [],
-    contact: true,
-  },
 };
-
-// ─── CONTACT CONTENT ─────────────────────────────────────────────────────────
-
-function ContactContent() {
-  const CONTACT_ITEMS = [
-    {
-      icon: "mail",
-      label: "General Support",
-      value: "support@animexis.app",
-      sub: "Account issues, billing, and general help",
-      action: () => Linking.openURL("mailto:support@animexis.app"),
-    },
-    {
-      icon: "shield",
-      label: "Legal & Copyright",
-      value: "legal@animexis.app",
-      sub: "DMCA notices and IP concerns",
-      action: () => Linking.openURL("mailto:legal@animexis.app"),
-    },
-    {
-      icon: "bug",
-      label: "Bug Reports",
-      value: "bugs@animexis.app",
-      sub: "App crashes, playback issues, and errors",
-      action: () => Linking.openURL("mailto:bugs@animexis.app"),
-    },
-    {
-      icon: "briefcase",
-      label: "Business Inquiries",
-      value: "business@animexis.app",
-      sub: "Partnerships and licensing",
-      action: () => Linking.openURL("mailto:business@animexis.app"),
-    },
-  ];
-
-  return (
-    <View style={contact.wrap}>
-      {/* Intro */}
-      <View style={contact.intro}>
-        <Text style={contact.introText}>
-          We'd love to hear from you. Choose the right channel below and we'll
-          get back to you as soon as possible.
-        </Text>
-        <View style={contact.introBadge}>
-          <Ionicons name="time-outline" size={13} color={C.crimson} />
-          <Text style={contact.introBadgeText}>Typical response time: 24–48 hours</Text>
-        </View>
-      </View>
-
-      {/* Contact cards */}
-      {CONTACT_ITEMS.map((item, i) => (
-        <TouchableOpacity
-          key={i}
-          style={contact.card}
-          onPress={item.action}
-          activeOpacity={0.7}
-        >
-          <View style={contact.cardIcon}>
-            <Ionicons name={item.icon} size={20} color={C.crimson} />
-          </View>
-          <View style={contact.cardInfo}>
-            <Text style={contact.cardLabel}>{item.label}</Text>
-            <Text style={contact.cardValue}>{item.value}</Text>
-            <Text style={contact.cardSub}>{item.sub}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={C.dimmer} />
-        </TouchableOpacity>
-      ))}
-
-      {/* FAQ note */}
-      <View style={contact.faqBox}>
-        <Ionicons name="information-circle-outline" size={16} color={C.dim} />
-        <Text style={contact.faqText}>
-          Before reaching out, check our FAQ — most questions are answered there
-          instantly.
-        </Text>
-      </View>
-
-      {/* Social */}
-      <Text style={contact.socialLabel}>Follow us</Text>
-      <View style={contact.socialRow}>
-        {[
-          { icon: "logo-twitter",  label: "@animexis" },
-          { icon: "logo-instagram", label: "animexis.app" },
-          { icon: "logo-discord",  label: "discord.gg/animexis" },
-        ].map((s, i) => (
-          <View key={i} style={contact.socialChip}>
-            <Ionicons name={s.icon} size={14} color={C.dim} />
-            <Text style={contact.socialChipText}>{s.label}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-const contact = StyleSheet.create({
-  wrap:           { paddingBottom: 8 },
-  intro:          { marginBottom: 24, gap: 10 },
-  introText:      { color: C.dim, fontSize: 14, lineHeight: 22 },
-  introBadge: {
-    flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start",
-    backgroundColor: C.crimsonDim, borderWidth: 1, borderColor: C.crimsonBorder,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-  },
-  introBadgeText: { color: C.crimson, fontSize: 12, fontWeight: "600" },
-
-  card: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    backgroundColor: C.surfaceHigh,
-    borderWidth: 1, borderColor: C.border,
-    borderRadius: 16, padding: 16, marginBottom: 10,
-  },
-  cardIcon: {
-    width: 44, height: 44, borderRadius: 13,
-    backgroundColor: C.crimsonDim, borderWidth: 1, borderColor: C.crimsonBorder,
-    justifyContent: "center", alignItems: "center",
-  },
-  cardInfo:   { flex: 1 },
-  cardLabel:  { color: C.white, fontSize: 13, fontWeight: "700", marginBottom: 2 },
-  cardValue:  { color: C.crimson, fontSize: 12, fontWeight: "600", marginBottom: 2 },
-  cardSub:    { color: C.dimmer, fontSize: 11 },
-
-  faqBox: {
-    flexDirection: "row", alignItems: "flex-start", gap: 10,
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 14, padding: 14, marginTop: 6, marginBottom: 24,
-  },
-  faqText:      { color: C.dim, fontSize: 12, lineHeight: 18, flex: 1 },
-
-  socialLabel:  { color: C.dim, fontSize: 11, fontWeight: "700", textTransform: "uppercase",
-                  letterSpacing: 0.8, marginBottom: 10 },
-  socialRow:    { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  socialChip: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: C.surfaceHigh, borderWidth: 1, borderColor: C.border,
-    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
-  },
-  socialChipText: { color: C.dim, fontSize: 12 },
-});
 
 // ─── MAIN MODAL ───────────────────────────────────────────────────────────────
 
@@ -413,29 +266,23 @@ export default function LegalModal({ page, onClose }) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {data.contact ? (
-            <ContactContent />
-          ) : (
-            data.sections.map((s, i) => (
-              <View key={i} style={styles.section}>
-                <View style={styles.sectionHeadRow}>
-                  <View style={styles.sectionDot} />
-                  <Text style={styles.sectionHeading}>{s.heading}</Text>
-                </View>
-                <Text style={styles.sectionBody}>{s.body}</Text>
+          {data.sections.map((s, i) => (
+            <View key={i} style={styles.section}>
+              <View style={styles.sectionHeadRow}>
+                <View style={styles.sectionDot} />
+                <Text style={styles.sectionHeading}>{s.heading}</Text>
               </View>
-            ))
-          )}
+              <Text style={styles.sectionBody}>{s.body}</Text>
+            </View>
+          ))}
 
           {/* Footer note for legal pages */}
-          {!data.contact && (
-            <View style={styles.footerNote}>
+          <View style={styles.footerNote}>
               <Ionicons name="information-circle-outline" size={14} color={C.dimmer} />
               <Text style={styles.footerNoteText}>
                 For questions about this document, contact us at legal@animexis.app
               </Text>
-            </View>
-          )}
+          </View>
         </ScrollView>
       </Animated.View>
     </Modal>

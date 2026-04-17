@@ -9,6 +9,9 @@ import {
   Platform,
   Alert,
   RefreshControl,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -279,7 +282,7 @@ const UserRow = React.memo(function UserRow({
         <TouchableOpacity
           style={[styles.actionBtn, bypassed && styles.actionBtnBypass]}
           onPress={() => onToggleBypass(email)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          hitSlop={{ top: 10, bottom: 10, left: 6, right: 4 }}
           disabled={isToggling}
         >
           {isToggling ? (
@@ -296,7 +299,7 @@ const UserRow = React.memo(function UserRow({
         <TouchableOpacity
           style={[styles.actionBtn, subscription === 'premium' && styles.actionBtnPremium]}
           onPress={() => onToggleSubscription(email, subscription)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
           disabled={isToggling}
         >
           <Ionicons
@@ -306,17 +309,7 @@ const UserRow = React.memo(function UserRow({
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => onBan(email, isBanned)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons
-            name={isBanned ? "checkmark-circle-outline" : "ban-outline"}
-            size={15}
-            color={isBanned ? "#22c55e" : C.dimmer}
-          />
-        </TouchableOpacity>
+
       </View>
     </View>
   );
@@ -351,6 +344,7 @@ export default function AdminDashboardScreen({ navigation }) {
   const [topAnime,    setTopAnime]    = useState([]);
   const [recentUsers, setRecentUsers] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
+  const [reports,     setReports]     = useState([]);
   const [activeTab,   setActiveTab]   = useState("overview");
   const [bypassSet,   setBypassSet]   = useState(new Set()); // emails that bypass OTP
   const [apiError,    setApiError]    = useState(null);
@@ -361,6 +355,12 @@ export default function AdminDashboardScreen({ navigation }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreActivity, setHasMoreActivity] = useState(true);
   const [activeUsers, setActiveUsers] = useState(null);
+  
+  // Feedback Reply State
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const scrollY   = useRef(new Animated.Value(0)).current;
@@ -386,13 +386,14 @@ export default function AdminDashboardScreen({ navigation }) {
     const cfg = { headers: authHeader };
 
     try {
-      const [statsRes, animeRes, usersRes, activityRes, scraperRes, visitsRes] = await Promise.allSettled([
+      const [statsRes, animeRes, usersRes, activityRes, scraperRes, visitsRes, reportsRes] = await Promise.allSettled([
         API.get("/api/admin/stats",        cfg),
         API.get("/api/admin/top-anime",    cfg),
         API.get("/api/admin/recent-users?limit=50", cfg),
         API.get("/api/admin/activity?limit=10&skip=0",     cfg),
         API.get("/api/admin/scraper-status", cfg),
         API.get("/api/admin/monthly-visits", cfg),
+        API.get("/api/admin/reports", cfg),
       ]);
 
       if (statsRes.status === "fulfilled") {
@@ -431,6 +432,9 @@ export default function AdminDashboardScreen({ navigation }) {
       if (visitsRes.status === "fulfilled") {
         setMonthlyVisits(visitsRes.value.data.visits || []);
       }
+      if (reportsRes.status === "fulfilled") {
+        setReports(reportsRes.value.data.reports || []);
+      }
     } catch (err) {
       setApiError(err.message || "Failed to load dashboard data.");
     } finally {
@@ -455,6 +459,7 @@ export default function AdminDashboardScreen({ navigation }) {
 
   // ── Ban / Unban ───────────────────────────────────────────────────────────
   const handleBanUser = useCallback(async (email, currentlyBanned) => {
+    const lower = email.toLowerCase();
     const action     = currentlyBanned ? "Unban" : "Ban";
     const endpoint   = currentlyBanned ? "/api/admin/unban-user" : "/api/admin/ban-user";
     const actionMsg  = currentlyBanned
@@ -467,13 +472,15 @@ export default function AdminDashboardScreen({ navigation }) {
         text: action,
         style: currentlyBanned ? "default" : "destructive",
         onPress: async () => {
+          setTogglingBypass(lower);
           try {
             const authHeader = await getAuthHeader();
-            await API.post(endpoint, { email }, { headers: authHeader });
+            await API.post(endpoint, { email: lower }, { headers: authHeader });
+            
             // Optimistic update
             setRecentUsers((prev) =>
               prev.map((u) =>
-                u.email === email ? { ...u, isBanned: !currentlyBanned } : u
+                u.email?.toLowerCase() === lower ? { ...u, isBanned: !currentlyBanned } : u
               )
             );
             setStats((prev) =>
@@ -488,6 +495,8 @@ export default function AdminDashboardScreen({ navigation }) {
             );
           } catch {
             Alert.alert("Error", `Could not ${action.toLowerCase()} user. Try again.`);
+          } finally {
+            setTogglingBypass(null);
           }
         },
       },
@@ -552,6 +561,31 @@ export default function AdminDashboardScreen({ navigation }) {
       setTogglingBypass(null);
     }
   }, []);
+
+  const handleSendReply = async (feedbackId) => {
+    if (!replyText.trim()) return;
+    setSendingReply(true);
+
+    try {
+      const authHeader = await getAuthHeader();
+      const res = await API.post(
+        "/api/admin/reply-feedback",
+        { feedbackId, reply: replyText.trim() },
+        { headers: authHeader }
+      );
+
+      if (res.data?.success) {
+        setReports(prev => prev.map(r => r.id === feedbackId ? { ...r, adminReply: replyText.trim(), status: 'resolved' } : r));
+        setReplyingTo(null);
+        setReplyText("");
+        Alert.alert("Success", "Reply successfully sent!");
+      }
+    } catch (err) {
+      Alert.alert("Error", "Failed to send reply.");
+    } finally {
+      setSendingReply(false);
+    }
+  };
 
   const handleLoadMoreActivity = useCallback(async () => {
     if (loadingMore || !hasMoreActivity) return;
@@ -623,6 +657,7 @@ export default function AdminDashboardScreen({ navigation }) {
     { key: "overview", label: "Overview", icon: "grid-outline" },
     { key: "users",    label: "Users",    icon: "people-outline",
       badge: recentUsers.length > 0 ? recentUsers.length : null, badgeColor: "#3b82f6" },
+    { key: "feedbacks", label: "Feedback", icon: "chatbubble-ellipses-outline" },
     { key: "system",   label: "System",   icon: "settings-outline" },
   ];
 
@@ -902,8 +937,8 @@ export default function AdminDashboardScreen({ navigation }) {
                         <Text style={styles.animeTitle} numberOfLines={1}>{item.title}</Text>
                       </View>
                       <View style={styles.animeViewsWrap}>
-                        <View style={[styles.animeBar, { width: item.views ? Math.max(10, (item.views / Math.max(...topAnime.map(a => a.views || 0), 1)) * 100) + "%" : "10%" }]} />
-                        <Text style={styles.animeViews}>{item.views ?? "—"} {item.views ? "views" : ""}</Text>
+                        <Ionicons name="eye-outline" size={13} color={C.dimmer} />
+                        <Text style={styles.animeViews}>{item.views?.toLocaleString() ?? "—"}</Text>
                       </View>
                     </View>
                   ))
@@ -952,6 +987,72 @@ export default function AdminDashboardScreen({ navigation }) {
                       subscription={u.subscription}
                       onToggleSubscription={handleToggleSubscription}
                     />
+                  ))
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* ═══════════ FEEDBACKS TAB ═══════════ */}
+          {activeTab === "feedbacks" && (
+            <View style={styles.body}>
+              <SectionHeader title={`User Feedback (${reports.length})`} icon="chatbubble-ellipses-outline" />
+              <View style={styles.panel}>
+                {reports.length === 0 ? (
+                  <Text style={styles.emptyText}>No feedback available.</Text>
+                ) : (
+                  reports.map((fb, i) => (
+                    <View key={fb.id || i} style={[styles.actRow, i < reports.length - 1 && styles.actRowBorder, { minHeight: 70 }]}>
+                      <View style={[styles.actIconWrap, { backgroundColor: 'rgba(220,20,60,0.1)', borderColor: 'rgba(220,20,60,0.3)' }]}>
+                        <Ionicons 
+                          name={fb.type === 'bug' ? 'bug' : fb.type === 'feature' ? 'bulb' : 'chatbubble'} 
+                          size={14} 
+                          color={C.crimson} 
+                        />
+                      </View>
+                      <View style={styles.actInfo}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={[styles.actTitle, { color: C.white, fontSize: 13, fontWeight: "700" }]}>{fb.email}</Text>
+                            {fb.email === 'Guest' && (
+                              <View style={[styles.miniBadge, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }]}>
+                                <Text style={[styles.miniBadgeText, { color: C.dimmer }]}>GUEST</Text>
+                              </View>
+                            )}
+                            {fb.status === 'resolved' ? (
+                              <View style={[styles.miniBadge, { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.3)' }]}>
+                                <Text style={[styles.miniBadgeText, { color: "#22c55e" }]}>RESOLVED</Text>
+                              </View>
+                            ) : (
+                              <View style={[styles.miniBadge, { backgroundColor: 'rgba(234,179,8,0.1)', borderColor: 'rgba(234,179,8,0.3)' }]}>
+                                <Text style={[styles.miniBadgeText, { color: "#eab308" }]}>PENDING</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.actTime}>{new Date(fb.createdAt).toLocaleDateString()}</Text>
+                        </View>
+                        <Text style={[styles.actTitle, { color: C.dim, fontSize: 14, lineHeight: 20 }]} selectable>
+                          {fb.message}
+                        </Text>
+                        
+                        {fb.status === 'resolved' && fb.adminReply ? (
+                          <View style={{ marginTop: 8, backgroundColor: 'rgba(255,255,255,0.05)', padding: 10, borderRadius: 8 }}>
+                            <Text style={{ color: '#4ba3ff', fontSize: 11, fontWeight: '700', marginBottom: 2 }}>Admin Reply:</Text>
+                            <Text style={{ color: C.white, fontSize: 13 }}>{fb.adminReply}</Text>
+                          </View>
+                        ) : fb.email !== 'Guest' ? (
+                          <TouchableOpacity 
+                            style={{ alignSelf: 'flex-start', marginTop: 10, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: 'rgba(75,163,255,0.1)', borderWidth: 1, borderColor: 'rgba(75,163,255,0.3)', flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                            onPress={() => setReplyingTo(fb)}
+                          >
+                            <Ionicons name="chatbubble-ellipses-outline" size={12} color="#4ba3ff" />
+                            <Text style={{ color: '#4ba3ff', fontSize: 11, fontWeight: '700' }}>Reply in Modal</Text>
+                          </TouchableOpacity>
+                        ) : (
+                           <Text style={{ color: C.dimmer, fontSize: 10, marginTop: 8, fontStyle: 'italic' }}>* Anonymous feedback (cannot reply)</Text>
+                        )}
+                      </View>
+                    </View>
                   ))
                 )}
               </View>
@@ -1020,6 +1121,58 @@ export default function AdminDashboardScreen({ navigation }) {
 
         </Animated.View>
       </Animated.ScrollView>
+
+      {/* ═══════════ REPLY MODAL ═══════════ */}
+      <Modal
+        visible={!!replyingTo}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reply to Feedback</Text>
+              <TouchableOpacity onPress={() => { setReplyingTo(null); setReplyText(""); }}>
+                <Ionicons name="close" size={24} color={C.dim} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalSelectedFeedback}>
+              <Text style={styles.modalFeedbackUser}>{replyingTo?.email}</Text>
+              <Text style={styles.modalFeedbackText} numberOfLines={3}>
+                "{replyingTo?.message}"
+              </Text>
+            </View>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Start drafting your reply..."
+              placeholderTextColor={C.dimmer}
+              multiline
+              autoFocus
+              textAlignVertical="top"
+              value={replyText}
+              onChangeText={setReplyText}
+            />
+
+            <TouchableOpacity 
+              style={[styles.modalSubmitBtn, sendingReply && { opacity: 0.7 }]} 
+              onPress={() => handleSendReply(replyingTo?.id)}
+              disabled={sendingReply}
+            >
+              {sendingReply ? (
+                <ActivityIndicator color={C.white} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="send" size={16} color={C.white} />
+                  <Text style={styles.modalSubmitText}>Send Reply</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -1189,9 +1342,8 @@ const styles = StyleSheet.create({
   animeRank:      { color: C.crimson, fontSize: 13, fontWeight: "800", width: 22 },
   animeInfo:      { flex: 1 },
   animeTitle:     { color: C.white, fontSize: 13, fontWeight: "600" },
-  animeViewsWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
-  animeBar:       { height: 4, borderRadius: 2, backgroundColor: C.crimson, opacity: 0.7 },
-  animeViews:     { color: C.dim, fontSize: 11, minWidth: 32, textAlign: "right" },
+  animeViewsWrap: { flexDirection: "row", alignItems: "center", gap: 4, opacity: 0.8 },
+  animeViews:     { color: C.dim, fontSize: 12, fontWeight: "600" },
 
   legendRow: {
     flexDirection: "row", alignItems: "flex-start", gap: 7,
@@ -1253,8 +1405,101 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(234, 179, 8, 0.12)",
     borderColor: "rgba(234, 179, 8, 0.30)",
   },
+  actionBtnBanned: {
+    backgroundColor: "rgba(220, 20, 60, 0.12)",
+    borderColor: "rgba(220, 20, 60, 0.30)",
+  },
 
   emptyText:  { color: C.dim, fontSize: 13, padding: 20, textAlign: "center" },
   footer:     { alignItems: "center", paddingVertical: 20 },
   footerText: { color: C.dimmer, fontSize: 11 },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: C.bg,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    color: C.white,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  modalSelectedFeedback: {
+    backgroundColor: C.surface,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: "#4ba3ff",
+  },
+  modalFeedbackUser: {
+    color: "#4ba3ff",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  modalFeedbackText: {
+    color: C.dim,
+    fontSize: 13,
+    fontStyle: "italic",
+    lineHeight: 18,
+  },
+  modalInput: {
+    backgroundColor: C.surfaceHigh,
+    color: C.white,
+    fontSize: 15,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    minHeight: 120,
+    padding: 16,
+    marginBottom: 16,
+  },
+  modalSubmitBtn: {
+    backgroundColor: C.crimson,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  modalSubmitText: {
+    color: C.white,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  miniBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
 });

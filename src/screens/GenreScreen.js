@@ -22,10 +22,10 @@ import DotCircleLoader from "../components/DotCircleLoader";
 
 // ─── RESPONSIVE GRID ──────────────────────────────────────────────────────────
 const getCardDimensions = (width) => {
-  if (width >= 1200) return { cols: 6, cardWidth: (width - 48) / 6 - 12 };
-  if (width >= 992)  return { cols: 5, cardWidth: (width - 48) / 5 - 12 };
-  if (width >= 768)  return { cols: 4, cardWidth: (width - 48) / 4 - 12 };
-  return { cols: 3, cardWidth: (width - 48) / 3 - 12 };
+  if (width >= 1200) return { cols: 6, cardWidth: (width - 20) / 6 - 12 };
+  if (width >= 992)  return { cols: 5, cardWidth: (width - 20) / 5 - 12 };
+  if (width >= 768)  return { cols: 4, cardWidth: (width - 20) / 4 - 12 };
+  return { cols: 2, cardWidth: (width - 20) / 2 - 12 };
 };
 
 // ─── GENRE SCREEN ─────────────────────────────────────────────────────────────
@@ -159,10 +159,7 @@ export default function GenreScreen({ route, navigation }) {
               )}
             </View>
 
-            {/* Sort/Filter button placeholder */}
-            <TouchableOpacity style={styles.filterBtn}>
-              <Ionicons name="options-outline" size={18} color={C.dim} />
-            </TouchableOpacity>
+            {/* Removed Sort/Filter button placeholder */}
           </View>
         </BlurView>
       </Animated.View>

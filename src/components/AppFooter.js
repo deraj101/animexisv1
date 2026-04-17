@@ -10,13 +10,13 @@ import { useNavigation } from "@react-navigation/native";
 import { C } from "../theme";
 import LegalModal from "./LegalModal";
 
-const ALPHABET = ["#", "0-9", ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const LINKS = [
   { label: "About Us",           screen: "AboutUs" },
+  { label: "Feedback & Bugs",    screen: "Feedback" },
   { label: "Terms & Conditions", page: "terms"     },
   { label: "Privacy Policy",     page: "privacy"   },
   { label: "Terms of Use",       page: "use"       },
-  { label: "Contact",            page: "contact"   },
 ];
 
 export default function AppFooter() {
