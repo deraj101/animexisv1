@@ -125,6 +125,7 @@ export default function DetailsScreen({ route, navigation }) {
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [userRating,    setUserRating]= useState(0);
   const [isReversed,    setIsReversed]= useState(false);
   const [activeRange,   setActiveRange] = useState(0); 
@@ -261,8 +262,13 @@ export default function DetailsScreen({ route, navigation }) {
       } else {
         Alert.alert("Error", res.data.error || "Failed to load episode");
       }
-    } catch {
-      Alert.alert("Error", "Failed to load episode. Please try again.");
+    } catch (err) {
+      // Check if the backend returned a daily-limit 403
+      if (err.response?.status === 403 && err.response?.data?.limitReached) {
+        setShowLimitModal(true);
+      } else {
+        Alert.alert("Error", "Failed to load episode. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -761,6 +767,70 @@ export default function DetailsScreen({ route, navigation }) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ── DAILY LIMIT WARNING MODAL ── */}
+      <Modal
+        visible={showLimitModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLimitModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLimitModal(false)}
+        >
+          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.limitModal}>
+            {/* Glow accent */}
+            <LinearGradient
+              colors={[C.crimson, C.crimsonBright]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.limitModalAccent}
+            />
+
+            <View style={styles.limitIconWrap}>
+              <Ionicons name="warning" size={36} color={C.crimson} />
+            </View>
+
+            <Text style={styles.limitTitle}>Daily Limit Reached</Text>
+            <Text style={styles.limitSubtitle}>
+              You've watched{" "}
+              <Text style={{ color: C.crimson, fontWeight: "800" }}>20 / 20</Text>
+              {" "}episodes today.
+            </Text>
+            <Text style={styles.limitBody}>
+              Free accounts are limited to 20 unique episodes per day. Upgrade to{" "}
+              <Text style={{ color: C.crimsonBright, fontWeight: "700" }}>Premium</Text>
+              {" "}for unlimited, ad-free streaming!
+            </Text>
+
+            <TouchableOpacity
+              style={styles.limitUpgradeBtn}
+              onPress={() => {
+                setShowLimitModal(false);
+                navigation.navigate("Subscription");
+              }}
+            >
+              <LinearGradient
+                colors={[C.crimson, "#a00020"]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.limitUpgradeGradient}
+              >
+                <Ionicons name="diamond" size={16} color="white" />
+                <Text style={styles.limitUpgradeText}>Upgrade to Premium</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.limitDismissBtn}
+              onPress={() => setShowLimitModal(false)}
+            >
+              <Text style={styles.limitDismissText}>Maybe Later</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1025,4 +1095,84 @@ const styles = StyleSheet.create({
   ratingLabel: { color: C.dim, fontSize: 13, fontWeight: "600" },
   starsRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingValue: { color: "#FFD700", fontSize: 13, fontWeight: "700", marginLeft: 6 },
+
+  // ── Daily Limit Modal ──
+  limitModal: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: C.surface,
+    borderRadius: 28,
+    paddingTop: 0,
+    paddingBottom: 28,
+    paddingHorizontal: 28,
+    borderWidth: 1,
+    borderColor: C.crimsonBorder,
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  limitModalAccent: {
+    height: 3,
+    width: "120%",
+    marginBottom: 24,
+  },
+  limitIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: C.crimsonDim,
+    borderWidth: 1,
+    borderColor: C.crimsonBorder,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  limitTitle: {
+    color: C.white,
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  limitSubtitle: {
+    color: C.dim,
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  limitBody: {
+    color: C.dimmer,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  limitUpgradeBtn: {
+    width: "100%",
+    borderRadius: 30,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  limitUpgradeGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    gap: 8,
+  },
+  limitUpgradeText: {
+    color: C.white,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  limitDismissBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  limitDismissText: {
+    color: C.dimmer,
+    fontSize: 13,
+    fontWeight: "600",
+  },
 });
