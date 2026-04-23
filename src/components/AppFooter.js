@@ -73,7 +73,7 @@ export default function AppFooter() {
         </View>
 
         {/* Copyright */}
-        <Text style={styles.copy}>© 2025 Animexis. All rights reserved.</Text>
+        <Text style={styles.copy}>© 2026 Animexis. All rights reserved.</Text>
       </View>
 
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />

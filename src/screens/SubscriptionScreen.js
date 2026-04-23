@@ -135,11 +135,11 @@ export default function SubscriptionScreen({ navigation }) {
             </TouchableOpacity>
 
             <View style={styles.paymentIcons}>
-                <Text style={styles.paymentText}>Supports GCash, PayMaya, and Credit Cards</Text>
+                <Text style={styles.paymentText}>Supports Credit and Debit Cards (via Stripe)</Text>
                 <View style={styles.iconRow}>
-                   <View style={styles.walletBadge}><Text style={styles.walletText}>GCash</Text></View>
-                   <View style={styles.walletBadge}><Text style={styles.walletText}>PayMaya</Text></View>
                    <Ionicons name="card-outline" size={20} color={C.dim} />
+                   <Ionicons name="logo-visa" size={20} color={C.dim} />
+                   <Ionicons name="logo-mastercard" size={20} color={C.dim} />
                 </View>
             </View>
           </View>

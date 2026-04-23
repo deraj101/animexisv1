@@ -42,7 +42,7 @@ const PAGES = {
   terms: {
     icon: "document-text",
     title: "Terms & Conditions",
-    lastUpdated: "January 1, 2025",
+    lastUpdated: "January 1, 2026",
     sections: [
       {
         heading: "1. Acceptance of Terms",
@@ -90,7 +90,7 @@ const PAGES = {
   privacy: {
     icon: "shield-checkmark",
     title: "Privacy Policy",
-    lastUpdated: "January 1, 2025",
+    lastUpdated: "January 1, 2026",
     sections: [
       {
         heading: "1. Information We Collect",
@@ -138,7 +138,7 @@ const PAGES = {
   use: {
     icon: "reader",
     title: "Terms of Use",
-    lastUpdated: "January 1, 2025",
+    lastUpdated: "January 1, 2026",
     sections: [
       {
         heading: "1. Content Access",
@@ -186,7 +186,7 @@ const PAGES = {
 
 // ─── MAIN MODAL ───────────────────────────────────────────────────────────────
 
-export default function LegalModal({ page, onClose }) {
+export default function LegalModal({ page, onClose, onAccept }) {
   const slideAnim  = useRef(new Animated.Value(600)).current;
   const fadeAnim   = useRef(new Animated.Value(0)).current;
   // Keep last valid page so content stays visible during slide-out animation
@@ -284,6 +284,32 @@ export default function LegalModal({ page, onClose }) {
               </Text>
           </View>
         </ScrollView>
+
+        {/* Action Button (Acceptance Mode) */}
+        {onAccept && (
+          <View style={styles.actionArea}>
+            <TouchableOpacity 
+              style={styles.acceptBtn} 
+              activeOpacity={0.8}
+              onPress={() => {
+                onAccept();
+                onClose();
+              }}
+            >
+              <LinearGradient
+                colors={[C.crimsonText, C.crimson]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.acceptBtnGrad}
+              >
+                <Text style={styles.acceptBtnText}>Accept & Continue</Text>
+                <Ionicons name="arrow-forward" size={16} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.declineBtn} onPress={onClose}>
+              <Text style={styles.declineBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </Animated.View>
     </Modal>
   );
@@ -425,5 +451,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     flex: 1,
+  },
+  actionArea: {
+    padding: 20,
+    paddingTop: 10,
+    backgroundColor: C.surface,
+    borderTopWidth: 1,
+    borderColor: C.border,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+  },
+  acceptBtn: {
+    borderRadius: 14,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  acceptBtnGrad: {
+    height: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  acceptBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  declineBtn: {
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  declineBtnText: {
+    color: C.dim,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

@@ -156,8 +156,7 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 120, height: 120, borderRadius: 60,
     alignItems: "center", justifyContent: "center",
-    shadowColor: "#DC143C", shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3, shadowRadius: 15, elevation: 10
+    boxShadow: '0 10px 15px rgba(220,20,60,0.3)'
   },
   checkBadge: {
     position: "absolute", bottom: 0, right: 0,

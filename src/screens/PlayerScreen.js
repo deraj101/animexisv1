@@ -385,12 +385,16 @@ export default function PlayerScreen({ route, navigation }) {
 
   useEffect(() => {
     return () => {
-      if (!watchStartRef.current || !user?.email || wasFinishedRef.current) return;
+      if (!watchStartRef.current || !user?.email) return;
+      
       const elapsed = Math.round((Date.now() - watchStartRef.current) / 1000);
-      if (elapsed < 1) return; // Ignore accidental opens (<1s)
-      // Record watch time (No longer requiring 15s threshold)
-      Stats.addWatchTime(user.email, elapsed);
-      if (animeId) {
+      if (elapsed >= 1) {
+        // Record watch time statistics (ALWAYS, even if finished)
+        Stats.addWatchTime(user.email, elapsed);
+      }
+
+      // Record 'Continue Watching' progress (ONLY if not already marked finished)
+      if (animeId && !wasFinishedRef.current) {
         API.post("/api/anime/continue-watching", {
           email: user.email,
           animeId: animeId,
@@ -400,8 +404,6 @@ export default function PlayerScreen({ route, navigation }) {
           episodeNumber: String(episodeNumber || "1")
         }).catch(() => { });
       }
-      // Note: episode count is recorded at click-time in DetailsScreen,
-      // not here, so it stays in sync with the Redis daily-limit counter.
     };
   }, []);
 
@@ -783,10 +785,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     overflow: "hidden",
     zIndex: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.7, shadowRadius: 36,
-    elevation: 24,
+    boxShadow: '0 16px 36px rgba(0,0,0,0.7)',
   },
   cardHeader: {
     flexDirection: "row", alignItems: "center",

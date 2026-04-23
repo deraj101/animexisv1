@@ -23,8 +23,8 @@ const { width: W, height: H } = Dimensions.get("window");
 // ─── GENRE PILLS DATA ─────────────────────────────────────────────────────────
 const GENRES = [
   "Action", "Romance", "Fantasy", "Sci-Fi", "Isekai",
-  "Horror", "Slice of Life", "Sports", "Mecha", "Thriller",
-  "Comedy", "Drama", "Supernatural", "Mystery", "Shounen",
+  "Horror", "Slice of Life", "Sports", "Adventure", "Thriller",
+  "Comedy", "Drama", "Supernatural", "Mystery", "Psychological",
 ];
 
 // ─── FLOATING ANIME CARDS DATA ────────────────────────────────────────────────
@@ -36,12 +36,12 @@ const CARDS = [
 
 // ─── FEATURES DATA ────────────────────────────────────────────────────────────
 const FEATURES = [
-  { icon: "flash",          label: "Simulcast Ready",  desc: "New episodes go live within hours of Japan airing." },
-  { icon: "flag",           label: "Sub & Dub",        desc: "Switch between Japanese sub or English dub anytime." },
-  { icon: "eye-off",        label: "Minimal Ads",      desc: "Upgrade once and never see an ad again." },
-  { icon: "phone-portrait", label: "Any Device",       desc: "iOS, Android, web — your watchlist syncs everywhere." },
-  { icon: "heart",          label: "Favorites & Stats",desc: "Track watch time, ratings, and your favorites list." },
-  { icon: "search",         label: "50+ Genres",       desc: "Find your next binge in under 30 seconds." },
+  { icon: "flash",          label: "Instant Releases", desc: "Watch the latest episodes within hours of their Japan airing." },
+  { icon: "diamond",        label: "Premium Border",   desc: "Stand out in the community with an exclusive animated profile border." },
+  { icon: "eye-off",        label: "Zero Ads",         desc: "Upgrade once and enjoy a completely uninterrupted experience." },
+  { icon: "card",           label: "Secure Payments",  desc: "Safe & encrypted checkout with any Credit or Debit Card." },
+  { icon: "sync",           label: "Cloud Sync",       desc: "Your watchlist and progress sync instantly across all devices." },
+  { icon: "film",           label: "Full HD",          desc: "Stream in crystal clear 1080p resolution on any screen." },
 ];
 
 // ─── PLANS DATA ───────────────────────────────────────────────────────────────
@@ -50,50 +50,42 @@ const PLANS = [
     name: "Free",
     price: "₱0",
     period: "/ month",
-    desc: "Start watching with light ads",
+    desc: "Start watching today",
     featured: false,
-    perks: ["12,000+ episodes", "HD streaming (720p)", "Favorites list", "Light ads"],
+    perks: ["12,000+ episodes", "Standard quality (720p)", "20 episodes per day limit", "Standard profile"],
   },
   {
     name: "Premium",
     price: "₱149",
     period: "/ month",
-    desc: "Ad-free, full HD quality",
+    desc: "The ultimate experience",
     featured: true,
-    badge: "Popular",
-    perks: ["Everything in Free", "Full HD (1080p)", "Zero ads, ever", "2 simultaneous streams", "Early access"],
+    badge: "Recommended",
+    perks: ["Everything in Free", "Full HD (1080p)", "Zero ads, ever", "Exclusive profile border", "Unlimited daily playback"],
   },
 ];
 
 // ─── FAQ DATA ─────────────────────────────────────────────────────────────────
 const FAQ_ITEMS = [
   {
-    q: "Is Animexis really free to use?",
-    a: "Yes! You can stream thousands of episodes completely free. Free users watch a short ad before each episode. Upgrade to Premium for a completely ad-free experience.",
+    q: "Is Animexis free to use?",
+    a: "Yes! You can stream thousands of episodes for free. Free users have a limit of 20 unique episodes per day, which resets at midnight.",
   },
   {
-    q: "How many episodes can I watch per day on the free plan?",
-    a: "Free users can watch up to 20 unique episodes per day. Your daily limit resets every 24 hours at midnight. Premium members have unlimited access.",
+    q: "What payment methods do you accept?",
+    a: "We support all major Credit and Debit cards (Visa, Mastercard, etc.) via Stripe's secure checkout system.",
   },
   {
-    q: "What is included in the Premium plan?",
-    a: "Premium gives you zero ads, Full HD (1080p) streaming, up to 2 simultaneous streams, early access to new episodes, and priority support — all for ₱149/month.",
+    q: "What are the benefits of Premium?",
+    a: "Premium gives you 1080p quality, zero ads, unlimited daily episodes, an exclusive animated profile border, and support for concurrent streams.",
   },
   {
-    q: "Can I cancel my Premium subscription anytime?",
-    a: "Absolutely. You can cancel your Premium subscription at any time from your Profile settings. You'll continue to have Premium access until the end of your current billing period.",
-  },
-  {
-    q: "Are subtitles and dubs available?",
-    a: "Yes. Most series on Animexis are available in both Japanese with English subtitles (sub) and English dubbed audio (dub). You can switch at any time in the player.",
-  },
-  {
-    q: "Does my watchlist sync across devices?",
-    a: "Yes. Your favorites, watch time, ratings, and progress are all stored on our servers and linked to your account. Just log in on any device to pick up right where you left off.",
+    q: "Does my progress sync across devices?",
+    a: "Yes. Your favorites, watch history, and account settings are stored in the cloud and sync automatically whenever you log in.",
   },
   {
     q: "How quickly are new episodes added?",
-    a: "We aim to have new simulcast episodes available within hours of their original Japanese broadcast. Most ongoing series are updated weekly.",
+    a: "We aim to have new simulcast episodes available within hours of their original broadcast in Japan.",
   },
 ];
 
@@ -212,10 +204,9 @@ function PulsingButton({ onPress, children, style }) {
     <View style={{ position: "relative" }}>
       {/* Ambient glow ring */}
       <Animated.View
-        pointerEvents="none"
         style={[
           styles.pulseGlow,
-          { opacity: glow },
+          { opacity: glow, pointerEvents: "none" },
         ]}
       />
       <Animated.View style={[{ transform: [{ scale: pulse }] }, style]}>
@@ -599,7 +590,7 @@ export default function LandingScreen({ navigation }) {
               </React.Fragment>
             ))}
           </View>
-          <Text style={styles.footerCopy}>© 2025 Animexis. All rights reserved.</Text>
+          <Text style={styles.footerCopy}>© 2026 Animexis. All rights reserved.</Text>
         </View>
 
       </ScrollView>
@@ -691,11 +682,7 @@ const styles = StyleSheet.create({
     opacity: 0,
     // blur on web, elevation on native
     ...(Platform.OS === "web" ? { filter: "blur(16px)" } : {}),
-    shadowColor: C.crimson,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 20,
-    elevation: 10,
+    boxShadow: '0 0 20px rgba(220,20,60,0.7)',
   },
 
   btnOutline: {

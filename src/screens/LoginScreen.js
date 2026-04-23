@@ -74,11 +74,11 @@ function OtpInput({ value, onChange }) {
 }
 
 const otp = StyleSheet.create({
-  row:    { flexDirection: "row", gap: 10, justifyContent: "center", marginVertical: 8 },
+  row:    { flexDirection: "row", gap: 7, justifyContent: "center", marginVertical: 8 },
   box:    {
-    width: 46, height: 54, borderRadius: 12, borderWidth: 1,
+    width: 40, height: 48, borderRadius: 10, borderWidth: 1,
     borderColor: C.border, backgroundColor: C.surfaceHigh,
-    color: C.white, fontSize: 22, fontWeight: "700", textAlign: "center",
+    color: C.white, fontSize: 18, fontWeight: "700", textAlign: "center",
     outlineStyle: 'none',
   },
   filled: { borderColor: "rgba(255,255,255,0.22)", backgroundColor: "rgba(255,255,255,0.06)" },
@@ -274,6 +274,13 @@ export default function LoginScreen({ navigation }) {
     if (!password || password.length < 6) return setError("Password must be at least 6 characters.");
     if (password !== confirmPassword)     return setError("Passwords do not match.");
 
+    // Requirement: Must accept terms before registration
+    setLegalPage("terms");
+    // We pass handleActualRegister as the onAccept callback below in render
+  };
+
+  const handleActualRegister = async () => {
+    const trimmed = email.trim().toLowerCase();
     setLoading(true); clearError();
     try {
       const ok = await sendCode("/api/auth/register", { email: trimmed, password });
@@ -618,12 +625,16 @@ export default function LoginScreen({ navigation }) {
                 </React.Fragment>
               ))}
             </View>
-            <Text style={styles.footerCopy}>© 2025 Animexis. All rights reserved.</Text>
+            <Text style={styles.footerCopy}>© 2026 Animexis. All rights reserved.</Text>
           </View>
 
         </ScrollView>
       </KeyboardAvoidingView>
-      <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />
+      <LegalModal 
+        page={legalPage} 
+        onClose={() => setLegalPage(null)} 
+        onAccept={legalPage === "terms" && step === "register" ? handleActualRegister : null}
+      />
     </View>
   );
 }
@@ -653,8 +664,7 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_W, backgroundColor: C.surface, borderRadius: 28,
     borderWidth: 1, borderColor: C.border, padding: 28,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.5, shadowRadius: 30, elevation: 20,
+    boxShadow: '0 20px 30px rgba(0,0,0,0.5)'
   },
 
   tabs: {

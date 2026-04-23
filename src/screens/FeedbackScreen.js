@@ -263,10 +263,7 @@ const styles = StyleSheet.create({
   },
   successIconWrap: {
     marginBottom: 28,
-    shadowColor: "#22c55e",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4,
-    shadowRadius: 15,
+    boxShadow: '0 10px 15px rgba(34,197,94,0.4)',
     elevation: 12,
   },
   successTitle: {

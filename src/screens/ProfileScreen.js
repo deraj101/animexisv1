@@ -138,28 +138,6 @@ const Section = ({ title, children }) => (
   </View>
 );
 
-// ─── FAVORITE ITEM ────────────────────────────────────────────────────────────
-const FavoriteItem = React.memo(function FavoriteItem({ item, onPress, onRemove }) {
-  return (
-    <TouchableOpacity style={styles.favItem} onPress={() => onPress(item)} activeOpacity={0.75}>
-      {item.image ? (
-        <Image source={{ uri: item.image }} style={styles.favImage} />
-      ) : (
-        <View style={[styles.favImage, styles.favImagePlaceholder]}>
-          <Ionicons name="film-outline" size={20} color={C.dimmer} />
-        </View>
-      )}
-      <Text style={styles.favTitle} numberOfLines={2}>{item.title}</Text>
-      <TouchableOpacity
-        style={styles.favRemove}
-        onPress={() => onRemove(item)}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Ionicons name="close-circle" size={18} color={C.crimson} />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
-});
 
 // ─── PROFILE SCREEN ───────────────────────────────────────────────────────────
 export default function ProfileScreen({ navigation }) {
@@ -397,17 +375,6 @@ export default function ProfileScreen({ navigation }) {
     await updateUser({ profile_image: null });
   }, [user?.email, updateUser]);
 
-  // ── Favorites ────────────────────────────────────────────────────────────────
-  const handleRemoveFavorite = useCallback(async (item) => {
-    await Stats.toggleFavorite(user.email, item);
-    const updated = await Stats.getFavorites(user.email);
-    setFavorites(updated);
-    setLiveStats(prev => ({ ...prev, favCount: String(updated.length) }));
-  }, [user?.email]);
-
-  const handleOpenFavorite = useCallback((item) => {
-    navigation.navigate("Details", { id: item.id, title: item.title });
-  }, [navigation]);
 
   // ── Settings ─────────────────────────────────────────────────────────────────
   const toggleSetting = useCallback(async (key) => {
@@ -521,8 +488,8 @@ export default function ProfileScreen({ navigation }) {
             style={StyleSheet.absoluteFill}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           />
-          <View style={[styles.heroOrb, styles.heroOrbLeft]} pointerEvents="none" />
-          <View style={[styles.heroOrb, styles.heroOrbRight]} pointerEvents="none" />
+          <View style={[styles.heroOrb, styles.heroOrbLeft, { pointerEvents: "none" }]} />
+          <View style={[styles.heroOrb, styles.heroOrbRight, { pointerEvents: "none" }]} />
           <LinearGradient
             colors={["transparent", C.bg]} style={styles.heroFade}
             start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
@@ -693,6 +660,19 @@ export default function ProfileScreen({ navigation }) {
                 <View style={[styles.limitBarFill, { width: `${Math.min(100, (usage.count / usage.limit) * 100)}%` }]} />
               </View>
               <Text style={styles.limitHint}>You can watch 20 episodes every 24 hours. Go Premium for unlimited access!</Text>
+              <TouchableOpacity
+                style={styles.limitUpgradeBtn}
+                onPress={() => navigation.navigate("Subscription")}
+              >
+                <LinearGradient
+                  colors={[C.crimson, "#a00020"]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.limitUpgradeBtnGrad}
+                >
+                  <Text style={styles.limitUpgradeBtnText}>Upgrade Now</Text>
+                  <Ionicons name="flash" size={14} color={C.white} />
+                </LinearGradient>
+              </TouchableOpacity>
             </Animated.View>
           )}
 
@@ -707,27 +687,6 @@ export default function ProfileScreen({ navigation }) {
             </Text>
           </Animated.View>
 
-          {/* FAVORITES */}
-          {favorites.length > 0 && (
-            <Animated.View style={{ opacity: statsAnim }}>
-              <Section title={`Favorites  ·  ${favorites.length}`}>
-                <FlatList
-                  data={favorites}
-                  horizontal
-                  keyExtractor={(item) => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 10, paddingRight: 4 }}
-                  renderItem={({ item }) => (
-                    <FavoriteItem
-                      item={item}
-                      onPress={handleOpenFavorite}
-                      onRemove={handleRemoveFavorite}
-                    />
-                  )}
-                />
-              </Section>
-            </Animated.View>
-          )}
 
           {/* ACHIEVEMENTS */}
           <Animated.View style={{ opacity: badgeAnim }}>
@@ -761,13 +720,32 @@ export default function ProfileScreen({ navigation }) {
             </Section>
           </Animated.View>
 
+          {/* ACTIVITY */}
+          <Animated.View style={{ opacity: menuAnim }}>
+            <Section title="Activity">
+              <View style={styles.menuCard}>
+                <MenuRow icon="time-outline" label="Watch History" sub="Episodes you've seen" onPress={() => navigation.navigate("WatchHistory")} />
+                <MenuRow icon="bookmark-outline" label="Watchlist" sub="Plan to watch & more" onPress={() => navigation.navigate("Watchlist")} />
+                <MenuRow icon="heart-outline" label="Favorites" sub={`${favorites.length} items`} onPress={() => navigation.navigate("Favorites")} last />
+              </View>
+            </Section>
+
+          </Animated.View>
+
           {/* ACCOUNT */}
+
           <Animated.View style={{ opacity: menuAnim }}>
             <Section title="Account">
               <View style={styles.menuCard}>
                 <MenuRow icon="person-outline" label="Username" sub={username} onPress={() => { setNameInput(username); setEditingName(true); }} />
                 <MenuRow icon="mail-outline" label="Email" sub={user?.email} onPress={() => { }} />
 
+                <MenuRow
+                  icon="star-outline"
+                  label="Subscription"
+                  sub={user?.subscription === 'premium' ? "Premium Member" : "Free Plan (Upgrade?)"}
+                  onPress={() => navigation.navigate("Subscription")}
+                />
                 <MenuRow icon="log-out-outline" label="Sign Out" onPress={handleSignOut} danger last />
               </View>
             </Section>
@@ -837,11 +815,6 @@ const styles = StyleSheet.create({
   explainerText: { flex: 1, color: C.dim, fontSize: 11, lineHeight: 17 },
   explainerBold: { color: C.white, fontWeight: "700" },
 
-  favItem: { width: 90, alignItems: "center", gap: 6, position: "relative" },
-  favImage: { width: 90, height: 126, borderRadius: 12, borderWidth: 1, borderColor: C.border },
-  favImagePlaceholder: { backgroundColor: C.surfaceHigh, justifyContent: "center", alignItems: "center" },
-  favTitle: { color: C.white, fontSize: 10, fontWeight: "600", textAlign: "center", lineHeight: 14 },
-  favRemove: { position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: C.bg, justifyContent: "center", alignItems: "center" },
 
   section: { marginBottom: 24 },
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
@@ -939,4 +912,21 @@ const styles = StyleSheet.create({
   borderOptionText: { color: C.dim, fontSize: 10, fontWeight: "600" },
   borderOptionTextActive: { color: C.white, fontWeight: "800" },
 
+  limitUpgradeBtn: {
+    marginTop: 14,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  limitUpgradeBtnGrad: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+  },
+  limitUpgradeBtnText: {
+    color: C.white,
+    fontSize: 13,
+    fontWeight: "700",
+  },
 });

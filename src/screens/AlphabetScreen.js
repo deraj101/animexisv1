@@ -179,11 +179,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1.5,
     borderColor: C.crimson,
-    shadowColor: C.crimson,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 10,
-    elevation: 8,
+    boxShadow: '0 0 10px rgba(220,20,60,0.7)',
     zIndex: -1
   },
 });

@@ -10,6 +10,7 @@ import {
   Animated,
   FlatList,
   useWindowDimensions,
+  Modal,
 } from "react-native";
 import { Image } from "expo-image";
 
@@ -119,9 +120,12 @@ export default function DetailsScreen({ route, navigation }) {
   const [loading,       setLoading]   = useState(true);
   const [error,         setError]     = useState(null);
   const [activeEpIndex, setActive]    = useState(-1);
-  const [favorited,     setFavorited] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [watchlistStatus, setWatchlistStatus] = useState("None");
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [userRating,    setUserRating]= useState(0);
-  const [favLoading,    setFavLoading]= useState(false);
   const [isReversed,    setIsReversed]= useState(false);
   const [activeRange,   setActiveRange] = useState(0); 
 
@@ -213,8 +217,15 @@ export default function DetailsScreen({ route, navigation }) {
             Stats.isFavorited(user.email, id),
             Stats.getAnimeRating(user.email, id),
           ]);
-          setFavorited(fav);
+          setIsFavorited(fav);
           setUserRating(rating);
+
+          // Fetch current watchlist status
+          const wlRes = await API.get("/api/stats/watchlist");
+          if (wlRes.data.success) {
+            const item = wlRes.data.list.find(i => i.id === id);
+            setWatchlistStatus(item ? item.status : "None");
+          }
         }
       } else {
         setError(res.data.error || "Failed to load anime details");
@@ -257,6 +268,52 @@ export default function DetailsScreen({ route, navigation }) {
     }
   }, [anime, navigation, initialTitle, user, id]);
 
+  const handleToggleFavorite = async () => {
+    if (!user) {
+      Alert.alert("Login Required", "Please log in to add to favorites.");
+      return;
+    }
+    setFavoriteLoading(true);
+    try {
+      const animeObj = {
+        id: id,
+        title: anime?.title || initialTitle,
+        image: anime?.image || route.params?.image,
+      };
+      await Stats.toggleFavorite(user.email, animeObj);
+      setIsFavorited(!isFavorited);
+    } catch {
+      Alert.alert("Error", "Failed to update favorites.");
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
+
+  const updateWatchlistStatus = async (status) => {
+    if (!user) {
+      Alert.alert("Login Required", "Please log in to manage your watchlist.");
+      return;
+    }
+    setWatchlistLoading(true);
+    try {
+      const animeObj = {
+        id: id,
+        title: anime?.title || initialTitle,
+        image: anime?.image || route.params?.image,
+        status: status
+      };
+      const res = await API.post("/api/stats/watchlist", animeObj);
+      if (res.data.success) {
+        setWatchlistStatus(status);
+        setShowStatusPicker(false);
+      }
+    } catch {
+      Alert.alert("Error", "Failed to update watchlist status.");
+    } finally {
+      setWatchlistLoading(false);
+    }
+  };
+
   const handleTrailerPress = useCallback(() => {
     if (!anime?.trailer) return;
     const url = anime.trailer.site === "youtube"
@@ -264,16 +321,6 @@ export default function DetailsScreen({ route, navigation }) {
       : anime.trailer.id;
     Linking.openURL(url).catch(() => Alert.alert("Error", "Could not open trailer"));
   }, [anime]);
-
-  const handleFavorite = useCallback(async () => {
-    if (!user?.email || !anime) return;
-    setFavLoading(true);
-    const { isFavorited: nowFav } = await Stats.toggleFavorite(user.email, {
-      id, title: anime.title, image: anime.image,
-    });
-    setFavorited(nowFav);
-    setFavLoading(false);
-  }, [user, anime, id]);
 
   const handleRate = useCallback(async (stars) => {
     if (!user?.email) return;
@@ -319,8 +366,6 @@ export default function DetailsScreen({ route, navigation }) {
     );
   }
 
-  // ── EPISODE RANGES (Moved to top level) ──
-
   if (!anime) return null;
 
   const formatDate = (d) => {
@@ -355,15 +400,12 @@ export default function DetailsScreen({ route, navigation }) {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* ── STICKY COLLAPSING HEADER ───────────────────────────────────────────
-          Absolutely positioned on top; fades in as the banner scrolls away.
-          Shows the back button + title + score so the user always has context. */}
+      {/* ── STICKY COLLAPSING HEADER ─────────────────────────────────────────── */}
       <Animated.View
         style={[styles.stickyHeader, { opacity: stickyHeaderOpacity }]}
-        pointerEvents={undefined} // always receive touches so back btn works
+        pointerEvents={undefined}
       >
         <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
-        {/* Accent line */}
         <LinearGradient
           colors={[C.crimson, C.crimsonBright]}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -418,7 +460,6 @@ export default function DetailsScreen({ route, navigation }) {
             style={StyleSheet.absoluteFill}
           />
 
-          {/* Back button — visible when sticky header is hidden */}
           <View style={styles.backWrapper}>
             <BlurView intensity={50} tint="dark" style={styles.blurButton}>
               <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -477,26 +518,46 @@ export default function DetailsScreen({ route, navigation }) {
                     </LinearGradient>
                   </TouchableOpacity>
                 )}
+                
+                {/* ── ACTIONS (FAV & WATCHLIST) ── */}
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, isFavorited && styles.actionBtnActive]}
+                    onPress={handleToggleFavorite}
+                    disabled={favoriteLoading}
+                  >
+                    <Ionicons
+                      name={isFavorited ? "heart" : "heart-outline"}
+                      size={20}
+                      color={isFavorited ? C.crimson : C.white}
+                    />
+                    <Text style={[styles.actionText, isFavorited && { color: C.crimson }]}>
+                      {isFavorited ? "Favorited" : "Favorite"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtn, watchlistStatus !== "None" && styles.actionBtnActive]}
+                    onPress={() => setShowStatusPicker(true)}
+                    disabled={watchlistLoading}
+                  >
+                    <Ionicons
+                      name={watchlistStatus !== "None" ? "bookmark" : "bookmark-outline"}
+                      size={19}
+                      color={watchlistStatus !== "None" ? C.crimson : C.white}
+                    />
+                    <Text style={[styles.actionText, watchlistStatus !== "None" && { color: C.crimson }]}>
+                      {watchlistStatus === "None" ? "Add to List" : watchlistStatus}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 {anime.trailer && (
                   <TouchableOpacity style={styles.trailerButton} onPress={handleTrailerPress}>
                     <Ionicons name="logo-youtube" size={18} color="#FF4444" />
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  style={[
-                    styles.trailerButton,
-                    favorited && { borderColor: C.crimsonBorder, backgroundColor: C.crimsonDim },
-                  ]}
-                  onPress={handleFavorite}
-                  disabled={favLoading}
-                >
-                  <Ionicons
-                    name={favorited ? "heart" : "heart-outline"}
-                    size={18}
-                    color={favorited ? C.crimson : C.dim}
-                  />
-                </TouchableOpacity>
               </View>
+
             </View>
           </View>
 
@@ -670,9 +731,40 @@ export default function DetailsScreen({ route, navigation }) {
           <DotCircleLoader size={54} color={C.crimson} />
         </View>
       )}
+      {/* ── STATUS PICKER MODAL ── */}
+      <Modal
+        visible={showStatusPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStatusPicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowStatusPicker(false)}
+        >
+          <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.statusModal}>
+            <Text style={styles.modalTitle}>Update Status</Text>
+            {['Watching', 'Plan to Watch', 'Completed', 'On Hold', 'Dropped', 'None'].map(s => (
+              <TouchableOpacity 
+                key={s} 
+                style={[styles.statusOption, watchlistStatus === s && styles.statusOptionActive]}
+                onPress={() => updateWatchlistStatus(s)}
+              >
+                <Text style={[styles.statusOptionText, watchlistStatus === s && styles.statusOptionTextActive]}>
+                  {s === 'None' ? 'Remove from List' : s}
+                </Text>
+                {watchlistStatus === s && <Ionicons name="checkmark" size={18} color={C.crimson} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
+
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
@@ -901,6 +993,17 @@ const styles = StyleSheet.create({
   episodePlayIconActive: { backgroundColor: C.crimson },
 
   rangeSelector: { paddingBottom: 16, gap: 10 },
+  recommendationsList: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center", padding: 24 },
+  statusModal: { width: "100%", maxWidth: 340, backgroundColor: C.surface, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: C.border },
+  modalTitle: { color: C.white, fontSize: 18, fontWeight: "700", marginBottom: 20, textAlign: "center" },
+  statusOption: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 8, backgroundColor: C.surfaceHigh },
+  statusOptionActive: { backgroundColor: C.crimsonDim, borderWidth: 1, borderColor: C.crimsonBorder },
+  statusOptionText: { color: C.dim, fontSize: 15, fontWeight: "600" },
+  statusOptionTextActive: { color: C.white },
   rangePill: {
     paddingHorizontal: 16, paddingVertical: 8,
     borderRadius: 20, backgroundColor: C.surfaceHigh,

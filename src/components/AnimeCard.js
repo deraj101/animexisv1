@@ -143,14 +143,12 @@ const AnimeCard = React.memo(function AnimeCard({
             <LinearGradient
               colors={["transparent", "rgba(8,8,9,0.40)"]}
               locations={[0.6, 1]}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}
             />
 
             {/* Hover overlay: detailed metadata */}
             <Animated.View
-              pointerEvents="none"
-              style={[styles.cardHoverOverlay, { opacity: overlayOpacity }]}
+              style={[styles.cardHoverOverlay, { opacity: overlayOpacity, pointerEvents: "none" }]}
             >
               <BlurView intensity={Platform.OS === 'web' ? 45 : 30} tint="dark" style={StyleSheet.absoluteFill} />
               <LinearGradient
@@ -229,19 +227,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.22)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 8,
+    boxShadow: '0 0 10px rgba(0,0,0,0.5)'
   },
   cardImageContainer: {
     borderRadius: 6, overflow: "hidden",
     backgroundColor: C.surfaceHigh,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 14,
-    elevation: 5,
+    boxShadow: '0 8px 14px rgba(0,0,0,0.35)'
   },
   cardImage: { width: "100%", height: "100%" },
   cardHoverOverlay: {
@@ -256,10 +247,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.35)",
     justifyContent: "center", alignItems: "center",
     paddingLeft: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5, shadowRadius: 10,
-    elevation: 10,
+    boxShadow: '0 0 10px rgba(0,0,0,0.5)'
   },
   cardEpisodeBadge: {
     position: "absolute", bottom: 0, left: 0,

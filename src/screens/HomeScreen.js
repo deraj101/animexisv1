@@ -338,7 +338,9 @@ export default function HomeScreen({ navigation }) {
   const [spotlight, setSpotlight] = useState([]);
   const [genres, setGenres] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  const [searchHistory, setSearchHistory] = useState([]); // 🔍 NEW
   const [suggestLoading, setSuggestLoading] = useState(false);
+
   const [refreshing, setRefreshing] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
   const [error, setError] = useState(null);
@@ -489,7 +491,18 @@ export default function HomeScreen({ navigation }) {
         setContinueWatching([]);
         setUnreadCount(0);
       }
+      
+      // 3. Fetch Search History
+      if (user?.email) {
+        API.get(`/api/anime/search-history?email=${encodeURIComponent(user.email)}`)
+          .then(res => { if (active && res.data.success) setSearchHistory(res.data.list || []); })
+          .catch(() => {});
+      } else {
+        setSearchHistory([]);
+      }
+      
       return () => { active = false; };
+
     }, [user])
   );
 
@@ -585,8 +598,9 @@ export default function HomeScreen({ navigation }) {
       return;
     }
     setSearchLoading(true);
-    API.get(`/api/anime/search?q=${encodeURIComponent(text)}&page=${activePage}`)
+    API.get(`/api/anime/search?q=${encodeURIComponent(text)}&page=${activePage}&email=${user?.email ? encodeURIComponent(user.email) : ''}`)
       .then(res => {
+
         const results = res.data.results || [];
         lastSearchRef.current = { query: text, results, page: activePage, hasNextPage: res.data.hasNextPage };
         setAnime(results);
@@ -683,7 +697,22 @@ export default function HomeScreen({ navigation }) {
     setSuggestions([]);
     setShowSuggestions(false);
     lastSearchRef.current = { query: "", results: [], page: 1, hasNextPage: false };
-  }, []);
+    
+    // Refresh history
+    if (user?.email) {
+      API.get(`/api/anime/search-history?email=${encodeURIComponent(user.email)}`)
+        .then(res => { if (res.data.success) setSearchHistory(res.data.list || []); });
+    }
+  }, [user?.email]);
+
+  const clearHistory = useCallback(async () => {
+    if (!user?.email) return;
+    try {
+      await API.delete("/api/anime/search-history", { data: { email: user.email } });
+      setSearchHistory([]);
+    } catch {}
+  }, [user?.email]);
+
 
   const dropdownTranslateY = dropdownAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] });
   const dropdownOpacity = dropdownAnim;
@@ -784,7 +813,45 @@ export default function HomeScreen({ navigation }) {
                     </ScrollView>
                   </Animated.View>
                 )}
+
+                {/* ── SEARCH HISTORY DROPDOWN (Shown when focused and query is empty) ── */}
+                {showSuggestions && query.length === 0 && searchHistory.length > 0 && (
+                  <Animated.View style={[
+                    styles.suggestionsDropdown,
+                    { width: width >= 768 ? 280 : 210 },
+                    {
+                      opacity: dropdownOpacity,
+                      transform: [{ translateY: dropdownTranslateY }, { scale: dropdownScale }],
+                    }
+                  ]}>
+                    <View style={styles.dropdownAccentLine} />
+                    <View style={styles.dropdownHeader}>
+                      <Text style={styles.dropdownHeaderText}>Recent Searches</Text>
+                      <TouchableOpacity onPress={clearHistory} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={{ color: C.crimson, fontSize: 11, fontWeight: "600" }}>Clear</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ paddingBottom: 10 }}>
+                      {searchHistory.map((item, index) => (
+                        <TouchableOpacity 
+                          key={`hist-${index}`} 
+                          style={styles.historyItem} 
+                          onPress={() => {
+                            setQuery(item.query);
+                            searchAnime(item.query);
+                            setShowSuggestions(false);
+                          }}
+                        >
+                          <Ionicons name="time-outline" size={14} color={C.dim} style={{ marginRight: 10 }} />
+                          <Text style={styles.historyText} numberOfLines={1}>{item.query}</Text>
+                          <Ionicons name="arrow-forward" size={12} color={C.surfaceHigh} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </Animated.View>
+                )}
               </View>
+
 
               <View style={styles.navRight}>
                 <TouchableOpacity
@@ -1338,7 +1405,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(220,20,60,0.12)",
     borderWidth: 1, borderColor: "rgba(220,20,60,0.3)",
     justifyContent: "center", alignItems: "center",
-    elevation: 4, shadowColor: C.crimson, shadowOpacity: 0.2, shadowRadius: 4,
+    boxShadow: '0 0 4px rgba(220,20,60,0.2)'
   },
   logo: { color: C.white, fontSize: 22, fontWeight: "900", letterSpacing: -1 },
 
@@ -1368,10 +1435,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.border,
     borderRadius: 18, overflow: "hidden",
     zIndex: 1200,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.6, shadowRadius: 24,
-    elevation: 16,
+    boxShadow: '0 16px 24px rgba(0,0,0,0.6)'
   },
   dropdownAccentLine: { height: 2, backgroundColor: C.crimson, opacity: 0.9 },
   dropdownHeader: {
@@ -1379,10 +1443,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  dropdownHeaderText: {
-    color: C.dim, fontSize: 11, fontWeight: "700",
-    textTransform: "uppercase", letterSpacing: 1,
+  dropdownHeaderText: { color: C.dim, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  historyItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.03)",
   },
+  historyText: { flex: 1, color: C.white, fontSize: 13, fontWeight: "500" },
   suggestionItem: {
     flexDirection: "row", alignItems: "center",
     paddingVertical: 10, paddingHorizontal: 14,
@@ -1421,7 +1491,7 @@ const styles = StyleSheet.create({
   },
   spotlightBadgeText: { color: C.white, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
 
-  heroSpotlightTitle: { color: C.white, fontWeight: "900", marginBottom: 6, textShadowColor: "rgba(0,0,0,0.5)", textShadowRadius: 8 },
+  heroSpotlightTitle: { color: C.white, fontWeight: "900", marginBottom: 6, textShadow: "0px 0px 8px rgba(0,0,0,0.5)" },
 
   heroGenreRow: { flexDirection: "row", gap: 6, marginBottom: 14, flexWrap: "wrap" },
   heroGenrePill: {
@@ -1465,19 +1535,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.22)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 8,
+    boxShadow: '0 0 10px rgba(0,0,0,0.5)'
   },
   cardImageContainer: {
     borderRadius: 12, overflow: "hidden",
     backgroundColor: C.surfaceHigh,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 14,
-    elevation: 5,
+    boxShadow: '0 8px 14px rgba(0,0,0,0.35)'
   },
   cardImage: { width: "100%", height: "100%" },
   cardHoverOverlay: {
@@ -1492,10 +1555,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.35)",
     justifyContent: "center", alignItems: "center",
     paddingLeft: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5, shadowRadius: 10,
-    elevation: 10,
+    boxShadow: '0 0 10px rgba(0,0,0,0.5)'
   },
   cardEpisodeBadge: {
     position: "absolute", bottom: 0, left: 0,
@@ -1713,11 +1773,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     padding: 16,
     zIndex: 1500,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 8,
+    boxShadow: '0 10px 16px rgba(0,0,0,0.5)'
   },
   mobileNavRow: {
     flexDirection: "row",
