@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import PremiumBorder from '../components/PremiumBorder'; // 🎨 NEW
 import { C } from '../theme';
 import API from '../services/api';
-import DotCircleLoader from '../components/DotCircleLoader';
+import { SkeletonProfile } from '../components/SkeletonGrid';
 
 const { width } = Dimensions.get('window');
 
@@ -108,9 +108,7 @@ export default function PublicProfileScreen({ route, navigation }) {
           </TouchableOpacity>
 
           {loading && !profile ? (
-            <View style={styles.center}>
-              <DotCircleLoader size={54} color={C.crimson} />
-            </View>
+            <SkeletonProfile />
           ) : !profile ? (
             <View style={styles.center}>
               <Text style={{ color: C.dim }}>User not found.</Text>

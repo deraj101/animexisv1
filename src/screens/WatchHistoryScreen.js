@@ -17,7 +17,7 @@ import { Image } from "expo-image";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
 import API from "../services/api";
-import DotCircleLoader from "../components/DotCircleLoader";
+import { SkeletonList } from "../components/SkeletonGrid";
 
 const { width } = Dimensions.get("window");
 
@@ -115,8 +115,8 @@ export default function WatchHistoryScreen({ navigation }) {
       {renderHeader()}
 
       {loading ? (
-        <View style={styles.center}>
-          <DotCircleLoader size={32} color={C.crimson} />
+        <View style={{ flex: 1 }}>
+          <SkeletonList count={8} />
         </View>
       ) : history.length === 0 ? (
         <View style={styles.center}>

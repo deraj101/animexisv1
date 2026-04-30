@@ -397,9 +397,6 @@ export default function LoginScreen({ navigation }) {
               <Ionicons name="arrow-back" size={20} color={C.white} />
             </TouchableOpacity>
             <View style={styles.navLogo}>
-              <View style={styles.navLogoIcon}>
-                <Ionicons name="flame" size={14} color={C.crimson} />
-              </View>
               <Text style={styles.navLogoText}>
                 ANIME<Text style={{ color: C.crimson }}>XIS</Text>
               </Text>

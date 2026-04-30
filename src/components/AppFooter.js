@@ -44,9 +44,6 @@ export default function AppFooter() {
 
         {/* Logo */}
         <View style={styles.logoRow}>
-          <View style={styles.logoIcon}>
-            <Ionicons name="flame" size={13} color={C.crimson} />
-          </View>
           <Text style={styles.logoText}>
             ANIME<Text style={{ color: C.crimson }}>XIS</Text>
           </Text>

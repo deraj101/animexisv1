@@ -1,10 +1,14 @@
 import React, { useEffect } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, LogBox } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import API from "./src/services/api";
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
+import { Platform } from "react-native";
 
 import LandingScreen from "./src/screens/LandingScreen";   // ← NEW
 import LoginScreen from "./src/screens/LoginScreen";
@@ -25,10 +29,21 @@ import FeedbackScreen from "./src/screens/FeedbackScreen"; // 📝 NEW
 import WatchHistoryScreen from "./src/screens/WatchHistoryScreen"; // 🎬 NEW
 import FavoritesScreen from "./src/screens/FavoritesScreen"; // ❤️ NEW
 import WatchlistScreen from "./src/screens/WatchlistScreen"; // 🔖 NEW
+import DownloadsScreen from "./src/screens/DownloadsScreen"; // 📥 NEW
 
 
 
 const Stack = createNativeStackNavigator();
+
+LogBox.ignoreLogs(['[expo-av]: Expo AV has been deprecated', 'expo-notifications: Android Push']);
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 function AppNavigator() {
   const { user, loading } = useAuth();
@@ -53,6 +68,34 @@ function AppNavigator() {
     }, 180000); // 3 * 60 * 1000
 
     return () => clearInterval(interval);
+  }, [user]);
+
+  // ── PUSH NOTIFICATIONS ──
+  useEffect(() => {
+    if (!user) return;
+
+    const setupNotifications = async () => {
+      const token = await registerForPushNotificationsAsync();
+      if (token) {
+        try {
+          await API.post("/api/stats/push-token", { token });
+          console.log("📲 Push token registered successfully.");
+        } catch (err) {
+          console.log("❌ Push token registration failed:", err.message);
+        }
+      }
+    };
+
+    setupNotifications();
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      if (data?.animeId) {
+        navigation.navigate("Details", { id: data.animeId });
+      }
+    });
+
+    return () => responseListener.remove();
   }, [user]);
 
   // ── MOVED LOADING TO AppContent ──
@@ -107,12 +150,56 @@ function AppNavigator() {
           <Stack.Screen name="WatchHistory" component={WatchHistoryScreen} options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="Watchlist" component={WatchlistScreen} options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="Downloads" component={DownloadsScreen} options={{ animation: "slide_from_right" }} />
 
 
         </>
       )}
     </Stack.Navigator>
   );
+}
+
+async function registerForPushNotificationsAsync() {
+  let token;
+
+  if (Platform.OS === 'web') return null;
+  if (Constants.appOwnership === 'expo') {
+    console.log('Skipping push notifications in Expo Go.');
+    return null;
+  }
+
+  if (Device.isDevice) {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      console.log('Failed to get push token for push notification!');
+      return null;
+    }
+    
+    try {
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    } catch (e) {
+        console.log("Error getting push token:", e);
+    }
+  } else {
+    console.log('Must use physical device for Push Notifications');
+  }
+
+  if (Platform.OS === 'android') {
+    Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+  }
+
+  return token;
 }
 
 function AppContent({ linking }) {

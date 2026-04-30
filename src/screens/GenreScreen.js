@@ -18,7 +18,7 @@ import API from "../services/api";
 import { C } from "../theme";
 import AppFooter from "../components/AppFooter";
 import AnimeCard from "../components/AnimeCard";
-import DotCircleLoader from "../components/DotCircleLoader";
+import SkeletonGrid from "../components/SkeletonGrid";
 
 // ─── RESPONSIVE GRID ──────────────────────────────────────────────────────────
 const getCardDimensions = (width) => {
@@ -90,8 +90,8 @@ export default function GenreScreen({ route, navigation }) {
     return (
       <>
         {loadMore && (
-          <View style={styles.footerLoader}>
-            <DotCircleLoader size={24} color={C.crimson} />
+          <View style={{ marginTop: 10 }}>
+             <SkeletonGrid cardWidth={cardWidth} count={cols} />
           </View>
         )}
         <AppFooter />
@@ -164,13 +164,10 @@ export default function GenreScreen({ route, navigation }) {
         </BlurView>
       </Animated.View>
 
-      {/* ── LOADING ── */}
+      {/* LOADING SKELETON ── */}
       {loading && (
-        <View style={styles.centered}>
-          <View style={styles.loaderRing}>
-            <DotCircleLoader size={54} color={C.crimson} />
-          </View>
-          <Text style={styles.loadingText}>Loading {genreTitle}…</Text>
+        <View style={{ paddingTop: 116 }}>
+          <SkeletonGrid cardWidth={cardWidth} count={12} />
         </View>
       )}
 

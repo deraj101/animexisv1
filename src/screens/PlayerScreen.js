@@ -220,6 +220,7 @@ function AdOverlay({ onAdFinished }) {
             ref={adRef}
             src={ad.url}
             autoPlay
+            muted
             playsInline
             style={{ width: "100%", height: "100%", objectFit: "contain", backgroundColor: "#000" }}
             onLoadStart={() => setAdLoading(false)}
@@ -312,7 +313,7 @@ const PLAYER_H = Math.round(MODAL_W * (9 / 16));
 
 // ─── PLAYER SCREEN ────────────────────────────────────────────────────────────
 export default function PlayerScreen({ route, navigation }) {
-  const { video, title, animeTitle, episodeNumber, episodeTitle, episodeData, animeId, animeImage } = route.params;
+  const { video, title, animeTitle, episodeNumber, episodeTitle, episodeData, animeId, animeImage, isOffline } = route.params;
   const { user } = useAuth();
 
   const [playerLoading, setPlayerLoading] = useState(true);
@@ -331,6 +332,8 @@ export default function PlayerScreen({ route, navigation }) {
   const hideTimerRef = useRef(null);
   const watchStartRef = useRef(null);
   const wasFinishedRef = useRef(false);
+  const playbackRef = useRef({ position: 0, duration: 0 }); // track playback for progress sync
+  const lastSyncRef = useRef(0); // timestamp of last progress sync
 
   // ── Controls: show → fade in + start auto-hide timer ──────────────────────
   const showControls = useCallback(() => {
@@ -377,7 +380,9 @@ export default function PlayerScreen({ route, navigation }) {
           title: animeTitle || "Unknown Anime",
           image: animeImage || "",
           episodeUrl: video,
-          episodeNumber: String(episodeNumber || "1")
+          episodeNumber: String(episodeNumber || "1"),
+          progress: 0,
+          duration: 0,
         }).catch(() => { });
       }
     }
@@ -393,15 +398,18 @@ export default function PlayerScreen({ route, navigation }) {
         Stats.addWatchTime(user.email, elapsed);
       }
 
-      // Record 'Continue Watching' progress (ONLY if not already marked finished)
+      // Record 'Continue Watching' progress with timestamp (ONLY if not already marked finished)
       if (animeId && !wasFinishedRef.current) {
+        const { position, duration } = playbackRef.current;
         API.post("/api/anime/continue-watching", {
           email: user.email,
           animeId: animeId,
           title: animeTitle || "Unknown Anime",
           image: animeImage || "",
           episodeUrl: video,
-          episodeNumber: String(episodeNumber || "1")
+          episodeNumber: String(episodeNumber || "1"),
+          progress: Math.round(position),
+          duration: Math.round(duration),
         }).catch(() => { });
       }
     };
@@ -447,9 +455,10 @@ export default function PlayerScreen({ route, navigation }) {
 
   const isVideoFile = (url) => {
     if (!url) return false;
-    // Standard video formats + HLS (m3u8)
+    // Standard video formats + HLS (m3u8) + Kwik Direct MP4
     return url.match(/\.(mp4|mkv|webm|ogv|m3u8)$/i) ||
-      [".mp4", ".m3u8", ".mkv", ".webm"].some(ext => url.toLowerCase().includes(ext));
+      [".mp4", ".m3u8", ".mkv", ".webm"].some(ext => url.toLowerCase().includes(ext)) ||
+      url.includes('kwik.cx/v/');
   };
 
   const renderTooltip = (btnKey, text) => {
@@ -462,37 +471,75 @@ export default function PlayerScreen({ route, navigation }) {
     );
   };
 
-  const isEmbedPage = (url) =>
-    ["vibeplayer", "otakuhg", "otakuvid", "myvidplay", "upnvids", "gogoanime", "gogocdn",
-      "dood", "mp4upload", "fembed", "mcloud", "/embed/", "/e/", "/v/", "/player/", "/play/", "/watch/"]
+  const isEmbedPage = (url) => {
+    if (!url || isVideoFile(url)) return false;
+    return ["vibeplayer", "otakuhg", "otakuvid", "myvidplay", "upnvids", "gogoanime", "gogocdn",
+      "dood", "mp4upload", "fembed", "mcloud", "/embed/", "/e/", "/player/", "/play/", "/watch/", "kwik.cx/f/", "kwik.cx/e/"]
       .some(p => url.toLowerCase().includes(p));
+  };
 
   const buildStreamUrl = (rawUrl) => {
     if (Platform.OS === "web") {
-      return `${process.env.EXPO_PUBLIC_API_URL}/api/anime/stream?url=${encodeURIComponent(rawUrl)}`;
+      return `${process.env.EXPO_PUBLIC_API_URL}/api/anime/stream?url=${encodeURIComponent(rawUrl)}&token=${user?.token || ''}`;
     }
     return rawUrl;
   };
 
   const pickAndLoadSource = () => {
-    const videoSrc = episodeData?.videoSources?.find(s => isVideoFile(s.url || s));
-    if (videoSrc) {
+    console.log("[Player] 🔍 Picking source. Platform:", Platform.OS);
+    if (isOffline) {
+      console.log("[Player] 📦 Offline mode. Using local file:", video);
       setUseWebView(false);
-      setVideoUrl(buildStreamUrl(videoSrc.url || videoSrc));
+      setVideoUrl(video);
       return;
     }
+
+    const videoSrc = episodeData?.videoSources?.find(s => isVideoFile(s.url || s));
     const embedSrc = episodeData?.videoSources?.find(s => isEmbedPage(s.url || s));
-    if (embedSrc) {
-      setUseWebView(true);
-      setWebViewUrl(embedSrc.url || embedSrc);
-      return;
+
+    console.log("[Player] 🔎 Discovery:", {
+      hasVideo: !!videoSrc,
+      hasEmbed: !!embedSrc,
+      hasIframe: !!episodeData?.iframe,
+      videoUrl: videoSrc?.url || videoSrc
+    });
+
+    // On Web, prioritize iframes/embeds due to strict CORS and HLS proxying limitations.
+    if (Platform.OS === "web") {
+      if (episodeData?.iframe || embedSrc) {
+        const url = episodeData.iframe || embedSrc?.url || embedSrc;
+        console.log("[Player] 🌐 Web: Using WebView for embed:", url);
+        setUseWebView(true);
+        setWebViewUrl(url);
+        return;
+      }
+      if (videoSrc) {
+        const url = buildStreamUrl(videoSrc.url || videoSrc);
+        console.log("[Player] 🌐 Web: Falling back to direct video proxy (experimental):", url);
+        setUseWebView(false);
+        setVideoUrl(url);
+        return;
+      }
+    } else {
+      // On Mobile (Android/iOS), prioritize native direct video streams for better performance.
+      if (videoSrc) {
+        const url = buildStreamUrl(videoSrc.url || videoSrc);
+        console.log("[Player] 📱 Mobile: Using native direct stream:", url);
+        setUseWebView(false);
+        setVideoUrl(url);
+        return;
+      }
+      if (embedSrc || episodeData?.iframe) {
+        const url = embedSrc?.url || embedSrc || episodeData.iframe;
+        console.log("[Player] 📱 Mobile: Using WebView for embed:", url);
+        setUseWebView(true);
+        setWebViewUrl(url);
+        return;
+      }
     }
-    if (episodeData?.iframe) {
-      setUseWebView(true);
-      setWebViewUrl(episodeData.iframe);
-      return;
-    }
+
     if (video) {
+      console.log("[Player] ⚠️ No episodeData sources. Falling back to 'video' param:", video);
       if (isVideoFile(video)) {
         setUseWebView(false);
         setVideoUrl(buildStreamUrl(video));
@@ -502,13 +549,16 @@ export default function PlayerScreen({ route, navigation }) {
       }
       return;
     }
+    console.error("[Player] ❌ No playable source found!");
     setError("No playable source found for this episode.");
     setPlayerLoading(false);
   };
 
-  const handleVideoError = useCallback(() => {
+  const handleVideoError = useCallback((e) => {
+    console.log("❌ [Player] Video Error:", e?.error || e?.nativeEvent || e);
     setPlayerLoading(false);
     if (Platform.OS !== "web" && videoUrl) {
+      console.log("[Player] Falling back to WebView for URL:", videoUrl);
       setUseWebView(true);
       setWebViewUrl(videoUrl);
       setVideoUrl(null);
@@ -611,13 +661,43 @@ export default function PlayerScreen({ route, navigation }) {
         ) : videoUrl ? (
           <Video
             ref={videoRef}
-            source={{ uri: videoUrl }}
+            source={{ 
+              uri: videoUrl,
+              ...(videoUrl.startsWith('http') && {
+                headers: {
+                  "Referer": videoUrl.includes("kwik.cx") 
+                    ? "https://kwik.cx/" 
+                    : new URL(videoUrl).origin + "/"
+                }
+              })
+            }}
             style={styles.video}
             useNativeControls
             resizeMode="contain"
             onLoad={() => setPlayerLoading(false)}
             onPlaybackStatusUpdate={(status) => {
               if (status.isLoaded && status.durationMillis > 0) {
+                // Track playback position for progress sync
+                const posSec = status.positionMillis / 1000;
+                const durSec = status.durationMillis / 1000;
+                playbackRef.current = { position: posSec, duration: durSec };
+
+                // Sync progress to server every 15 seconds
+                const now = Date.now();
+                if (user?.email && animeId && now - lastSyncRef.current > 15000) {
+                  lastSyncRef.current = now;
+                  API.post("/api/anime/continue-watching", {
+                    email: user.email,
+                    animeId,
+                    title: animeTitle || "Unknown Anime",
+                    image: animeImage || "",
+                    episodeUrl: video,
+                    episodeNumber: String(episodeNumber || "1"),
+                    progress: Math.round(posSec),
+                    duration: Math.round(durSec),
+                  }).catch(() => {});
+                }
+
                 // 🏁 Threshold: Trigger cleanup if reached 98% OR within last 20 seconds
                 const isNearlyFinished =
                   status.positionMillis >= status.durationMillis * 0.98 ||

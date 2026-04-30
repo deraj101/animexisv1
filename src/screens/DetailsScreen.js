@@ -18,16 +18,88 @@ import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import API from "../services/api";
+import API, { API_LONG } from "../services/api";
 import { C } from "../theme";
 import AppFooter from "../components/AppFooter";
 import { useAuth } from "../context/AuthContext";
 import * as Stats from "../services/Userstats";
 import CommentSection from "../components/CommentSection";
 import DotCircleLoader from "../components/DotCircleLoader";
+import DownloadService from "../services/DownloadService";
+
+// ─── SHIMMER SKELETON ─────────────────────────────────────────────────────────
+const SHIMMER_COLORS = [
+  "rgba(255,255,255,0.00)",
+  "rgba(255,255,255,0.08)",
+  "rgba(255,255,255,0.18)",
+  "rgba(255,255,255,0.08)",
+  "rgba(255,255,255,0.00)",
+];
+const SHIMMER_LOCATIONS = [0, 0.2, 0.5, 0.8, 1];
+
+function SkeletonDetails({ shimmerX, width }) {
+  const translateX = shimmerX.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-width, width * 1.5],
+  });
+
+  const ShimmerOverlay = () => (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFill,
+        {
+          transform: [{ translateX }, { skewX: "-15deg" }],
+        },
+      ]}
+    >
+      <LinearGradient
+        colors={SHIMMER_COLORS}
+        locations={SHIMMER_LOCATIONS}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        style={StyleSheet.absoluteFill}
+      />
+    </Animated.View>
+  );
+
+  return (
+    <View style={shimStyles.container}>
+      {/* Banner Skeleton */}
+      <View style={shimStyles.banner}>
+        <ShimmerOverlay />
+      </View>
+      
+      <View style={shimStyles.content}>
+        <View style={shimStyles.row}>
+          {/* Poster Skeleton */}
+          <View style={shimStyles.poster}>
+            <ShimmerOverlay />
+          </View>
+          {/* Title area Skeleton */}
+          <View style={shimStyles.titleBlock}>
+            <View style={[shimStyles.textLine, { width: '80%', height: 28 }]}><ShimmerOverlay /></View>
+            <View style={[shimStyles.textLine, { width: '40%', height: 16, marginTop: 12 }]}><ShimmerOverlay /></View>
+            <View style={[shimStyles.textLine, { width: '60%', height: 40, marginTop: 20, borderRadius: 12 }]}><ShimmerOverlay /></View>
+          </View>
+        </View>
+
+        {/* Info Grid Skeleton */}
+        <View style={shimStyles.grid}>
+          {[1,2,3,4].map(i => (
+            <View key={i} style={shimStyles.gridItem}><ShimmerOverlay /></View>
+          ))}
+        </View>
+
+        {/* Description Skeleton */}
+        <View style={[shimStyles.textLine, { width: '100%', height: 14, marginTop: 30 }]}><ShimmerOverlay /></View>
+        <View style={[shimStyles.textLine, { width: '100%', height: 14, marginTop: 8 }]}><ShimmerOverlay /></View>
+        <View style={[shimStyles.textLine, { width: '70%', height: 14, marginTop: 8 }]}><ShimmerOverlay /></View>
+      </View>
+    </View>
+  );
+}
 
 // ─── ANIMATED EPISODE CARD ────────────────────────────────────────────────────
-const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isActive }) {
+const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, onDownload, isActive, progressPercent, isDownloaded, downloadProgress }) {
   const scale   = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const slideY  = useRef(new Animated.Value(16)).current;
@@ -42,7 +114,6 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isAc
       Animated.spring(slideY, {
         toValue: 0,
         delay: Math.min(index, 20) * 30,
-        tension: 90, friction: 10,
         useNativeDriver: true,
       }),
     ]).start();
@@ -52,6 +123,9 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isAc
     Animated.spring(scale, { toValue: 0.92, tension: 140, friction: 7, useNativeDriver: true }).start(), []);
   const onPressOut = useCallback(() =>
     Animated.spring(scale, { toValue: 1, tension: 140, friction: 7, useNativeDriver: true }).start(), []);
+
+  const isDownloading = downloadProgress !== undefined;
+  const isSearching = downloadProgress === -1;
 
   return (
     <Animated.View style={[styles.episodeCardWrap, { opacity, transform: [{ translateY: slideY }, { scale }] }]}>
@@ -76,16 +150,49 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isAc
           </Text>
         </View>
 
-        <View style={[styles.episodePlayIcon, isActive && styles.episodePlayIconActive]}>
-          <Ionicons name={isActive ? "pause" : "play"} size={14} color="white" />
+        <View style={styles.episodeActions}>
+          {isDownloaded ? (
+            <View style={styles.downloadStatus}>
+              <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+            </View>
+          ) : isSearching ? (
+            <View style={styles.downloadProgress}>
+              <Text style={[styles.progressText, { fontSize: 9 }]}>Finding...</Text>
+            </View>
+          ) : isDownloading ? (
+            <View style={styles.downloadProgress}>
+              <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={styles.downloadBtn} 
+              onPress={() => onDownload(item)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="cloud-download-outline" size={18} color={C.dim} />
+            </TouchableOpacity>
+          )}
+
+          <View style={[styles.episodePlayIcon, isActive && styles.episodePlayIconActive]}>
+            <Ionicons name={isActive ? "pause" : "play"} size={14} color="white" />
+          </View>
         </View>
+        
+        {progressPercent > 0 && (
+          <View style={styles.episodeProgressBarBg}>
+            <View style={[styles.episodeProgressBarFill, { width: `${Math.min(100, progressPercent)}%` }]} />
+          </View>
+        )}
       </TouchableOpacity>
     </Animated.View>
   );
 }, (prev, next) =>
-  prev.isActive === next.isActive &&
-  prev.item     === next.item     &&
-  prev.index    === next.index
+  prev.isActive          === next.isActive &&
+  prev.item              === next.item     &&
+  prev.index             === next.index    &&
+  prev.progressPercent   === next.progressPercent &&
+  prev.isDownloaded      === next.isDownloaded &&
+  prev.downloadProgress  === next.downloadProgress
 );
 
 // ─── INFO TILE ────────────────────────────────────────────────────────────────
@@ -109,7 +216,21 @@ function InfoTile({ label, value, icon, delay = 0 }) {
   );
 }
 
-// ─── DETAILS SCREEN ───────────────────────────────────────────────────────────
+const shimStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg },
+  banner: { width: '100%', height: 260, backgroundColor: 'rgba(255,255,255,0.03)' },
+  content: { padding: 20, marginTop: -40 },
+  row: { flexDirection: 'row', gap: 20 },
+  poster: { width: 110, height: 160, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)' },
+  titleBlock: { flex: 1, justifyContent: 'center' },
+  textLine: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 4, overflow: 'hidden' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 30 },
+  gridItem: { width: '48%', height: 60, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.04)', overflow: 'hidden' },
+});
+
+
+
+// ─── RESPONSIVE POSTER SIZING ───────────────────────────────────────────────────────────
 export default function DetailsScreen({ route, navigation }) {
   const { id, title: initialTitle } = route.params;
   const { width } = useWindowDimensions();
@@ -117,7 +238,8 @@ export default function DetailsScreen({ route, navigation }) {
 
   const [anime,         setAnime]     = useState(null);
   const [episodes,      setEpisodes]  = useState([]);
-  const [loading,       setLoading]   = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [episodeLoading, setEpisodeLoading] = useState(false);
   const [error,         setError]     = useState(null);
   const [activeEpIndex, setActive]    = useState(-1);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -129,6 +251,19 @@ export default function DetailsScreen({ route, navigation }) {
   const [userRating,    setUserRating]= useState(0);
   const [isReversed,    setIsReversed]= useState(false);
   const [activeRange,   setActiveRange] = useState(0); 
+  const [episodeProgress, setEpisodeProgress] = useState(null); // { episode_number, progress, duration }
+
+  const shimmerX = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(shimmerX, {
+        toValue: 1,
+        duration: 1800,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
 
   // ── EPISODE RANGES ──
   const CHUNK_SIZE = 50;
@@ -227,6 +362,14 @@ export default function DetailsScreen({ route, navigation }) {
             const item = wlRes.data.list.find(i => i.id === id);
             setWatchlistStatus(item ? item.status : "None");
           }
+
+          // Fetch episode progress for this anime
+          API.get(`/api/anime/episode-progress?email=${encodeURIComponent(user.email)}&animeId=${encodeURIComponent(id)}`)
+            .then(progRes => {
+              if (progRes.data.success && progRes.data.progress) {
+                setEpisodeProgress(progRes.data.progress);
+              }
+            }).catch(() => {});
         }
       } else {
         setError(res.data.error || "Failed to load anime details");
@@ -240,7 +383,7 @@ export default function DetailsScreen({ route, navigation }) {
   const handleEpisodePress = useCallback(async (episode, index) => {
     setActive(index);
     try {
-      setLoading(true);
+      setEpisodeLoading(true);
       const res = await API.get(`/api/anime/episode-info?url=${encodeURIComponent(episode.url)}`);
       if (res.data.success) {
         // Record episode the moment the user successfully plays it —
@@ -270,9 +413,129 @@ export default function DetailsScreen({ route, navigation }) {
         Alert.alert("Error", "Failed to load episode. Please try again.");
       }
     } finally {
-      setLoading(false);
+      setEpisodeLoading(false);
     }
   }, [anime, navigation, initialTitle, user, id]);
+
+  const [downloadedEps, setDownloadedEps] = useState({}); // { epNum: true }
+  const [downloadingEps, setDownloadingEps] = useState({}); // { epNum: progress }
+
+  useEffect(() => {
+    const checkDownloads = async () => {
+      const list = await DownloadService.getDownloads();
+      const map = {};
+      list.filter(d => d.animeId === id).forEach(d => {
+        map[d.episodeNumber] = true;
+      });
+      setDownloadedEps(map);
+    };
+    if (id) checkDownloads();
+  }, [id]);
+
+  const handleDownloadEpisode = async (episode) => {
+    if (user?.subscription?.toLowerCase() !== 'premium') {
+      Alert.alert("Premium Only", "Offline downloads are exclusive to Premium members. Upgrade to unlock!");
+      return;
+    }
+
+    if (downloadedEps[episode.number]) {
+      Alert.alert("Already Downloaded", "This episode is already available offline.");
+      return;
+    }
+
+    if (downloadingEps[episode.number] !== undefined) return;
+
+    try {
+      // Show "finding links" state (progress = -1 means searching)
+      setDownloadingEps(p => ({ ...p, [episode.number]: -1 }));
+
+      let directUrl = null;
+
+      // ── STEP 1: Try AnimePahe for direct MP4 ──────────────────────────────
+      try {
+        console.log(`[Download] 🔍 Searching AnimePahe for: ${anime?.title} Ep ${episode.number}`);
+        const paheRes = await API_LONG.get('/api/anime/pahe-sources', {
+          params: { title: anime?.title || initialTitle, episode: episode.number }
+        });
+
+        if (paheRes.data.success && paheRes.data.sources?.length > 0) {
+          // Find a resolved direct MP4 (not an embed)
+          const directSource = paheRes.data.sources.find(s => !s.isEmbed && !s.isKwik);
+          if (directSource) {
+            directUrl = directSource.url;
+            console.log(`[Download] ✅ AnimePahe MP4: ${directUrl.substring(0, 60)}...`);
+          }
+        }
+      } catch (paheErr) {
+        console.log(`[Download] ⚠️ AnimePahe failed: ${paheErr.message}`);
+      }
+
+      // ── STEP 2: Fallback to Gogo sources ──────────────────────────────────
+      // User requested to use ONLY AnimePahe for downloading.
+      /*
+      if (!directUrl) {
+        console.log('[Download] 🔄 Falling back to Gogo sources...');
+        const res = await API.get(`/api/anime/episode-info?url=${encodeURIComponent(episode.url)}`);
+        if (res.data.success) {
+          const videoSources = res.data.videoSources || [];
+          
+          // Look for direct MP4/MKV/WebM
+          const mp4Source = videoSources.find(s => {
+            const url = (s.url || s).toLowerCase();
+            return /\.(mp4|mkv|webm|mov|avi)/i.test(url);
+          });
+
+          if (mp4Source) {
+            directUrl = mp4Source.url || mp4Source;
+          } else {
+            // HLS fallback — use backend proxy
+            const hlsSource = videoSources.find(s => (s.url || s).toLowerCase().includes('.m3u8'));
+            if (hlsSource) {
+              const streamUrl = hlsSource.url || hlsSource;
+              directUrl = `${API.defaults.baseURL}/api/anime/download-m3u8?url=${encodeURIComponent(streamUrl)}`;
+            }
+          }
+        }
+      }
+      */
+
+      if (!directUrl) {
+        Alert.alert("Error", "No downloadable source found for this episode.");
+        setDownloadingEps(p => {
+          const next = { ...p };
+          delete next[episode.number];
+          return next;
+        });
+        return;
+      }
+
+      // ── STEP 3: Download the file ─────────────────────────────────────────
+      setDownloadingEps(p => ({ ...p, [episode.number]: 0 }));
+      
+      try {
+        await DownloadService.startDownload(
+          { ...episode, directUrl },
+          { id, title: anime?.title || initialTitle, image: anime?.image },
+          (progress) => {
+            setDownloadingEps(p => ({ ...p, [episode.number]: progress }));
+          }
+        );
+        setDownloadedEps(p => ({ ...p, [episode.number]: true }));
+        Alert.alert("Success", `Episode ${episode.number} downloaded successfully!`);
+      } catch (dlErr) {
+        Alert.alert("Download Failed", dlErr.message || "Failed to download episode.");
+      }
+    } catch (err) {
+      console.error("Download error:", err);
+      Alert.alert("Download Failed", err.message || "Failed to download episode.");
+    } finally {
+      setDownloadingEps(p => {
+        const next = { ...p };
+        delete next[episode.number];
+        return next;
+      });
+    }
+  };
 
   const handleToggleFavorite = async () => {
     if (!user) {
@@ -335,26 +598,34 @@ export default function DetailsScreen({ route, navigation }) {
     await Stats.rateAnime(user.email, id, newRating);
   }, [user, id, userRating]);
 
-  const renderEpisode = useCallback(({ item, index }) => (
-    <EpisodeCard
-      item={item}
-      index={index}
-      onPress={handleEpisodePress}
-      isActive={activeEpIndex === index}
-    />
-  ), [handleEpisodePress, activeEpIndex]);
+  const renderEpisode = useCallback(({ item, index }) => {
+    // Calculate progress percentage for this specific episode
+    let progressPercent = 0;
+    if (episodeProgress && 
+        String(episodeProgress.episode_number) === String(item.number) &&
+        episodeProgress.duration > 0) {
+      progressPercent = (episodeProgress.progress / episodeProgress.duration) * 100;
+    }
+    return (
+      <EpisodeCard
+        item={item}
+        index={index}
+        onPress={handleEpisodePress}
+        onDownload={handleDownloadEpisode}
+        isActive={activeEpIndex === index}
+        progressPercent={progressPercent}
+        isDownloaded={!!downloadedEps[item.number]}
+        downloadProgress={downloadingEps[item.number]}
+      />
+    );
+  }, [handleEpisodePress, activeEpIndex, episodeProgress]);
 
   const episodeKeyExtractor = useCallback((item, i) =>
     `${item.number || item.displayNumber || i}`, []);
 
   // ── LOADING ──
   if (loading && !anime) {
-    return (
-      <View style={styles.centered}>
-        <DotCircleLoader size={54} color={C.crimson} />
-        <Text style={styles.loadingText}>Loading…</Text>
-      </View>
-    );
+    return <SkeletonDetails shimmerX={shimmerX} width={width} />;
   }
 
   // ── ERROR ──
@@ -531,30 +802,26 @@ export default function DetailsScreen({ route, navigation }) {
                     style={[styles.actionBtn, isFavorited && styles.actionBtnActive]}
                     onPress={handleToggleFavorite}
                     disabled={favoriteLoading}
+                    activeOpacity={0.7}
                   >
                     <Ionicons
                       name={isFavorited ? "heart" : "heart-outline"}
                       size={20}
                       color={isFavorited ? C.crimson : C.white}
                     />
-                    <Text style={[styles.actionText, isFavorited && { color: C.crimson }]}>
-                      {isFavorited ? "Favorited" : "Favorite"}
-                    </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[styles.actionBtn, watchlistStatus !== "None" && styles.actionBtnActive]}
                     onPress={() => setShowStatusPicker(true)}
                     disabled={watchlistLoading}
+                    activeOpacity={0.7}
                   >
                     <Ionicons
                       name={watchlistStatus !== "None" ? "bookmark" : "bookmark-outline"}
-                      size={19}
+                      size={18}
                       color={watchlistStatus !== "None" ? C.crimson : C.white}
                     />
-                    <Text style={[styles.actionText, watchlistStatus !== "None" && { color: C.crimson }]}>
-                      {watchlistStatus === "None" ? "Add to List" : watchlistStatus}
-                    </Text>
                   </TouchableOpacity>
                 </View>
                 {anime.trailer && (
@@ -589,7 +856,10 @@ export default function DetailsScreen({ route, navigation }) {
 
           <View style={styles.divider} />
 
-          <Text style={styles.sectionLabel}>Synopsis</Text>
+          <View style={styles.episodesHeaderLeft}>
+            <View style={styles.sectionAccent} />
+            <Text style={styles.sectionLabel}>Synopsis</Text>
+          </View>
           <Text style={styles.synopsis}>
             {anime.description?.replace(/<[^>]*>/g, "") || "No synopsis available."}
           </Text>
@@ -731,10 +1001,10 @@ export default function DetailsScreen({ route, navigation }) {
         </Animated.View>
       </Animated.ScrollView>
 
-      {/* Loading overlay (episode fetch) */}
+      {/* Skeleton / Loading overlay */}
       {loading && (
-        <View style={styles.loadingOverlay}>
-          <DotCircleLoader size={54} color={C.crimson} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: C.bg, zIndex: 9999 }]}>
+          <SkeletonDetails shimmerX={shimmerX} width={width} />
         </View>
       )}
       {/* ── STATUS PICKER MODAL ── */}
@@ -831,6 +1101,12 @@ export default function DetailsScreen({ route, navigation }) {
           </View>
         </TouchableOpacity>
       </Modal>
+      {episodeLoading && (
+        <View style={styles.loadingOverlay}>
+          <DotCircleLoader size={32} color={C.white} />
+          <Text style={[styles.loadingText, { marginTop: 12 }]}>Preparing episode…</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -958,19 +1234,35 @@ const styles = StyleSheet.create({
   watchButtonText: { color: C.white, fontSize: 13, fontWeight: "700" },
   trailerButton: {
     width: 44, height: 44, borderRadius: 14,
-    backgroundColor: C.surfaceHigh, borderWidth: 1,
-    borderColor: "rgba(255,68,68,0.3)",
+    backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1,
+    borderColor: "rgba(255,68,68,0.2)",
     justifyContent: "center", alignItems: "center",
   },
-
-  infoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 20 },
-  infoItem: {
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 6, padding: 12, flex: 1, minWidth: 120,
+  actionRow: { flexDirection: "row", gap: 8 },
+  actionBtn: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center", alignItems: "center",
   },
-  infoIconRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 5 },
-  infoLabel: { color: C.dim, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: "600" },
-  infoValue: { color: C.white, fontSize: 14, fontWeight: "700" },
+  actionBtnActive: {
+    backgroundColor: "rgba(220,20,60,0.1)",
+    borderColor: "rgba(220,20,60,0.3)",
+  },
+
+  infoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 24 },
+  infoItem: {
+    backgroundColor: "rgba(255,255,255,0.03)", 
+    borderWidth: 1, 
+    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: 16, 
+    padding: 14, 
+    flex: 1, 
+    minWidth: 140,
+  },
+  infoIconRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  infoLabel: { color: C.dim, fontSize: 9, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: "800" },
+  infoValue: { color: C.white, fontSize: 13, fontWeight: "700" },
 
   otherNames: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -985,18 +1277,26 @@ const styles = StyleSheet.create({
   sectionLabel: { color: C.white, fontSize: 16, fontWeight: "700", marginBottom: 10, letterSpacing: -0.2 },
   synopsis: { color: "#c0c0d0", fontSize: 14, lineHeight: 22 },
 
-  genresContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 },
+  genresContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 },
   genreTag: {
-    backgroundColor: "rgba(255,255,255,0.05)", paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: 30, borderWidth: 1, borderColor: C.glass,
+    paddingHorizontal: 16, 
+    paddingVertical: 8,
+    borderRadius: 14, 
+    borderWidth: 1, 
   },
-  genreText: { color: C.dim, fontSize: 12, fontWeight: "600" },
+  genreText: { color: C.white, fontSize: 11, fontWeight: "700" },
 
   episodesHeader: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14,
   },
   episodesHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   sectionAccent: { width: 4, height: 18, backgroundColor: C.crimson, borderRadius: 2 },
+  heroGenrePill: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+    overflow: 'hidden',
+  },
+  heroGenreText: { color: "rgba(255,255,255,0.9)", fontSize: 10, fontWeight: "800", letterSpacing: 0.3 },
   epCountBadge: {
     backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: C.glass,
     paddingHorizontal: 9, paddingVertical: 3, borderRadius: 20,
@@ -1061,6 +1361,22 @@ const styles = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
   },
   episodePlayIconActive: { backgroundColor: C.crimson },
+
+  // Episode progress bar
+  episodeProgressBarBg: {
+    position: "absolute",
+    bottom: 0, left: 0, right: 0,
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    overflow: "hidden",
+  },
+  episodeProgressBarFill: {
+    height: 3,
+    backgroundColor: C.crimson,
+    borderBottomLeftRadius: 12,
+  },
 
   rangeSelector: { paddingBottom: 16, gap: 10 },
   recommendationsList: {
@@ -1174,5 +1490,35 @@ const styles = StyleSheet.create({
     color: C.dimmer,
     fontSize: 13,
     fontWeight: "600",
+  },
+  episodeActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  downloadBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  downloadStatus: {
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  downloadProgress: {
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  progressText: {
+    color: C.crimson,
+    fontSize: 9,
+    fontWeight: "800",
   },
 });

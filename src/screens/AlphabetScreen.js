@@ -18,7 +18,7 @@ import API from "../services/api";
 import { C } from "../theme";
 import AppFooter from "../components/AppFooter";
 import AnimeCard from "../components/AnimeCard";
-import DotCircleLoader from "../components/DotCircleLoader";
+import SkeletonGrid from "../components/SkeletonGrid";
 
 
 // ─── RESPONSIVE GRID ──────────────────────────────────────────────────────────
@@ -77,8 +77,8 @@ export default function AlphabetScreen({ route, navigation }) {
   const renderFooter = () => (
     <View>
       {loadMore && (
-        <View style={{ alignItems: "center", marginVertical: 20 }}>
-          <DotCircleLoader size={28} color={C.crimson} />
+        <View style={{ marginTop: 10 }}>
+           <SkeletonGrid cardWidth={cardWidth} count={cols} />
         </View>
       )}
       <AppFooter />
@@ -120,9 +120,8 @@ export default function AlphabetScreen({ route, navigation }) {
       </BlurView>
 
       {loading ? (
-        <View style={styles.centered}>
-          <DotCircleLoader size={54} color={C.crimson} />
-          <Text style={styles.loadingText}>Loading…</Text>
+        <View style={{ flex: 1, paddingTop: 20 }}>
+          <SkeletonGrid cardWidth={cardWidth} count={12} />
         </View>
       ) : (
         <FlatList

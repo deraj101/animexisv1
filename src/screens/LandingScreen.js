@@ -288,9 +288,6 @@ export default function LandingScreen({ navigation }) {
       {/* ── STICKY NAV ── */}
       <View style={styles.nav}>
         <View style={styles.navLogo}>
-          <View style={styles.navLogoIcon}>
-            <Ionicons name="flame" size={16} color={C.crimson} />
-          </View>
           <Text style={styles.navLogoText}>
             ANIME<Text style={{ color: C.crimson }}>XIS</Text>
           </Text>
@@ -563,9 +560,6 @@ export default function LandingScreen({ navigation }) {
         {/* ── FOOTER ── */}
         <View style={styles.footer}>
           <View style={styles.footerLogo}>
-            <View style={styles.navLogoIcon}>
-              <Ionicons name="flame" size={14} color={C.crimson} />
-            </View>
             <Text style={styles.navLogoText}>
               ANIME<Text style={{ color: C.crimson }}>XIS</Text>
             </Text>

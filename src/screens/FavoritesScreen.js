@@ -19,8 +19,8 @@ import { BlurView } from "expo-blur";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
 import * as Stats from "../services/Userstats";
-import DotCircleLoader from "../components/DotCircleLoader";
 import AnimeCard from "../components/AnimeCard";
+import SkeletonGrid from "../components/SkeletonGrid";
 
 const { width } = Dimensions.get("window");
 
@@ -143,8 +143,8 @@ export default function FavoritesScreen({ navigation }) {
       <LinearGradient colors={[C.void, C.bg]} style={StyleSheet.absoluteFill} />
       
       {loading ? (
-        <View style={styles.center}>
-          <DotCircleLoader size={40} color={C.crimson} />
+        <View style={{ paddingTop: 140 }}>
+          <SkeletonGrid cardWidth={gridCardWidth} cardHeight={gridCardHeight} count={12} />
         </View>
       ) : (
         <FlatList

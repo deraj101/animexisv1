@@ -27,6 +27,10 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
   }
 }
 
+// 🚀 GLOBAL TRAILER LIMITER
+let globalActiveTrailers = 0;
+const MAX_TRAILERS = 4;
+
 const AnimeCard = React.memo(function AnimeCard({
   item,
   cardWidth,
@@ -35,6 +39,8 @@ const AnimeCard = React.memo(function AnimeCard({
   index,
   inGrid = false,
   containerStyle,
+  progress,
+  duration: propDuration,
 }) {
   // Entrance
   const opacity = useRef(new Animated.Value(0)).current;
@@ -47,6 +53,48 @@ const AnimeCard = React.memo(function AnimeCard({
   // Hover overlay + glow
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const glowOpacity = useRef(new Animated.Value(0)).current;
+
+  const [isHovered, setIsHovered] = React.useState(false);
+  const [trailerInitialized, setTrailerInitialized] = React.useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && item.trailer?.id && typeof IntersectionObserver !== 'undefined') {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            // Background pre-load (only if limit not reached)
+            if (globalActiveTrailers < MAX_TRAILERS && !trailerInitialized) {
+              setTrailerInitialized(true);
+              globalActiveTrailers++;
+            }
+          } else {
+            // Only cleanup if NOT currently hovered
+            if (trailerInitialized && !isHovered) {
+              setTrailerInitialized(false);
+              globalActiveTrailers = Math.max(0, globalActiveTrailers - 1);
+            }
+          }
+        });
+      }, { threshold: 0.1, rootMargin: '150px' });
+
+      if (containerRef.current) observer.observe(containerRef.current);
+      return () => {
+        observer.disconnect();
+        if (trailerInitialized) {
+          globalActiveTrailers = Math.max(0, globalActiveTrailers - 1);
+        }
+      };
+    }
+  }, [item.trailer?.id, trailerInitialized, isHovered]);
+
+  // Force initialize if hovered
+  useEffect(() => {
+    if (isHovered && !trailerInitialized) {
+      setTrailerInitialized(true);
+      globalActiveTrailers++;
+    }
+  }, [isHovered]);
 
   useEffect(() => {
     Animated.parallel([
@@ -66,7 +114,18 @@ const AnimeCard = React.memo(function AnimeCard({
     ]).start();
   }, []);
 
+  useEffect(() => {
+    if (isHovered) {
+      if (!item.trailer?.id) {
+        console.log(`[HoverVideo] ❌ No trailer found for: ${item.title}`);
+      } else {
+        console.log(`[HoverVideo] 🔍 Trailer detected for: ${item.title} (${item.trailer.id})`);
+      }
+    }
+  }, [isHovered]);
+
   const handleHoverIn = useCallback(() => {
+    setIsHovered(true);
     Animated.parallel([
       Animated.spring(hoverScale, { toValue: 1.055, tension: 160, friction: 14, useNativeDriver: true }),
       Animated.timing(overlayOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
@@ -75,6 +134,7 @@ const AnimeCard = React.memo(function AnimeCard({
   }, []);
 
   const handleHoverOut = useCallback(() => {
+    setIsHovered(false);
     Animated.parallel([
       Animated.spring(hoverScale, { toValue: 1, tension: 160, friction: 14, useNativeDriver: true }),
       Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
@@ -111,15 +171,21 @@ const AnimeCard = React.memo(function AnimeCard({
   
   const studios = Array.isArray(item.studios) ? item.studios.map(s => s.name || s).join(", ") : item.studios;
   const producers = Array.isArray(item.producers) ? item.producers.map(p => p.name || p).join(", ") : item.producers;
-  const duration = item.duration || (item.episodeDuration ? `${item.episodeDuration}m` : null);
+  const totalDuration = item.duration || (item.episodeDuration ? `${item.episodeDuration}m` : null);
   const status = item.status || null;
   const premiered = item.premiered || (item.season ? `${item.season} ${item.seasonYear || ""}` : null);
+
+  // Calculate progress %
+  const prog = progress ?? item.progress;
+  const dur = propDuration ?? item.duration;
+  const progressPercent = (prog && dur && dur > 0) ? (prog / dur) * 100 : 0;
 
   // Use a fallback height if cardHeight is missing so grids display correctly
   const finalCardHeight = cardHeight || Math.round(cardWidth * 1.4);
 
   return (
     <Animated.View
+      ref={containerRef}
       style={[
         { opacity, transform: [{ translateY: slideY }] },
         containerStyle || { marginLeft: inGrid ? 0 : 16, marginBottom: inGrid ? 24 : 0 }
@@ -136,62 +202,55 @@ const AnimeCard = React.memo(function AnimeCard({
         >
           <View style={[styles.cardImageContainer, { height: finalCardHeight }]}>
             <Animated.View style={{ flex: 1, transform: [{ scale: hoverScale }] }}>
-              <Image source={{ uri: imgUrl }} style={styles.cardImage} contentFit="cover" transition={300} />
+              <Image 
+                source={{ uri: imgUrl }} 
+                style={[styles.cardImage, isHovered && item.trailer?.id && { opacity: 0 }]} 
+                contentFit="cover" 
+                transition={300} 
+              />
+              
+              {/* Persistent Hover Video (Web Only) */}
+              {Platform.OS === 'web' && trailerInitialized && item.trailer?.id && item.trailer?.site === 'youtube' && (
+                <Animated.View 
+                  style={[
+                    StyleSheet.absoluteFill, 
+                    { zIndex: 10, backgroundColor: '#000' },
+                    { 
+                      opacity: isHovered ? overlayOpacity.interpolate({
+                        inputRange: [0, 0.9, 1],
+                        outputRange: [0, 0, 1] 
+                      }) : 0,
+                      visibility: isHovered ? 'visible' : 'hidden' // Completely hide when not hovered
+                    }
+                  ]}
+                >
+                  <iframe
+                    src={`https://www.youtube.com/embed/${item.trailer.id}?autoplay=1&mute=1&muted=1&controls=0&loop=1&playlist=${item.trailer.id}&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&showinfo=0&autohide=1&playsinline=1&enablejsapi=1&version=3&widgetid=1&origin=${encodeURIComponent(window.location.origin)}`}
+                    style={{ 
+                      width: '180%', 
+                      height: '180%', 
+                      position: 'absolute',
+                      top: '-40%',
+                      left: '-40%',
+                      border: 'none', 
+                      pointerEvents: 'none',
+                      objectFit: 'cover',
+                      opacity: 0.99
+                    }}
+                    allow="autoplay; encrypted-media; fullscreen"
+                    title="Trailer Preview"
+                  />
+                </Animated.View>
+              )}
             </Animated.View>
 
             {/* Static bottom gradient */}
             <LinearGradient
               colors={["transparent", "rgba(8,8,9,0.40)"]}
               locations={[0.6, 1]}
-              style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}
+              style={[StyleSheet.absoluteFill, { zIndex: 1, pointerEvents: "none" }]}
             />
 
-            {/* Hover overlay: detailed metadata */}
-            <Animated.View
-              style={[styles.cardHoverOverlay, { opacity: overlayOpacity, pointerEvents: "none" }]}
-            >
-              <BlurView intensity={Platform.OS === 'web' ? 45 : 30} tint="dark" style={StyleSheet.absoluteFill} />
-              <LinearGradient
-                colors={["rgba(8,8,9,0.1)", "rgba(8,8,9,0.95)"]}
-                style={StyleSheet.absoluteFill}
-              />
-              
-                <View style={styles.hoverContent}>
-                  <View style={styles.hoverRatingRow}>
-                    <Text style={styles.hoverRatingNum}>
-                      {rating != null ? String(rating) : "—"}
-                    </Text>
-                    {rating != null && <Ionicons name="star" size={12} color="#FFD700" />}
-                    {item.ratingCount != null && (
-                      <Text style={styles.hoverRatingCount}>
-                        ({String(item.ratingCount)})
-                      </Text>
-                    )}
-                  </View>
-
-                  <View style={styles.hoverMainStats}>
-                    {item.seasonCount != null && (
-                      <Text style={styles.hoverStatLine}>
-                        {String(item.seasonCount)} Seasons
-                      </Text>
-                    )}
-                    {epLabel && (
-                      <Text style={styles.hoverStatLine}>
-                        {epLabel}
-                      </Text>
-                    )}
-                    {genres && (
-                      <Text style={styles.hoverStatLine}>
-                        {genres}
-                      </Text>
-                    )}
-                  </View>
-
-                  <Text style={styles.hoverSynopsis} numberOfLines={Platform.OS === 'web' ? 7 : 6}>
-                    {synopsis}
-                  </Text>
-                </View>
-              </Animated.View>
 
             {/* Category badge (Top-Right) */}
             <View style={styles.cardCategoryBadge}>
@@ -209,6 +268,13 @@ const AnimeCard = React.memo(function AnimeCard({
             <View style={styles.cardTypeBadge}>
               <Text style={styles.cardTypeText}>{typeLabel}</Text>
             </View>
+
+            {/* Progress Bar (Bottom) */}
+            {progressPercent > 0 && (
+              <View style={styles.cardProgressBarBg}>
+                <View style={[styles.cardProgressBarFill, { width: `${Math.min(100, progressPercent)}%` }]} />
+              </View>
+            )}
           </View>
 
           <View style={styles.cardContent}>
@@ -333,6 +399,17 @@ const styles = StyleSheet.create({
   },
   hoverActionBtn: {
     opacity: 0.9,
+  },
+  cardProgressBarBg: {
+    position: "absolute",
+    bottom: 0, left: 0, right: 0,
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    zIndex: 15,
+  },
+  cardProgressBarFill: {
+    height: "100%",
+    backgroundColor: C.crimson,
   },
 });
 

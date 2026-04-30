@@ -29,9 +29,6 @@ export default function AboutUsScreen({ navigation }) {
             colors={["rgba(220,20,60,0.15)", "transparent"]}
             style={StyleSheet.absoluteFill}
           />
-          <View style={styles.logoWrap}>
-            <Ionicons name="flame" size={32} color={C.crimson} />
-          </View>
           <Text style={styles.title}>
             ANIME<Text style={{ color: C.crimson }}>XIS</Text>
           </Text>

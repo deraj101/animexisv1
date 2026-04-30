@@ -15,6 +15,7 @@ import {
   useWindowDimensions,
   Alert,
   ScrollView,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
@@ -135,7 +136,7 @@ const SuggestionItem = React.memo(function SuggestionItem({ item, onPress, index
   );
 });
 
-// ─── SECTION ──────────────────────────────────────────────────────────────────
+
 const Section = React.memo(function Section({
   title, data, cardWidth, cardHeight, onItemPress, variant = "recent", isGrid = false, gridColumns = 2, gridGap = 10
 }) {
@@ -353,6 +354,8 @@ export default function HomeScreen({ navigation }) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // 📱 Mobile Menu State
+  const [dailyUsage, setDailyUsage] = useState(null); // { count, limit, subscription }
+  const [showLimitModal, setShowLimitModal] = useState(false); // 🚫 NEW
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const heroScrollX = useRef(new Animated.Value(0)).current; // 📏 Track hero scroll position
@@ -484,9 +487,15 @@ export default function HomeScreen({ navigation }) {
           .catch(() => { });
 
         // 2. Fetch Notifications Badge
-        NotificationApi.getNotifications().then(res => {
-          if (active && res.success) setUnreadCount(res.unreadCount);
-        });
+        const updateNotifs = () => {
+          NotificationApi.getNotifications().then(res => {
+            if (active && res.success) setUnreadCount(res.unreadCount);
+          });
+        };
+        updateNotifs();
+        const notifIv = setInterval(updateNotifs, 120_000); // 2 min polling
+        
+        return () => { active = false; clearInterval(notifIv); };
       } else {
         setContinueWatching([]);
         setUnreadCount(0);
@@ -497,8 +506,17 @@ export default function HomeScreen({ navigation }) {
         API.get(`/api/anime/search-history?email=${encodeURIComponent(user.email)}`)
           .then(res => { if (active && res.data.success) setSearchHistory(res.data.list || []); })
           .catch(() => {});
+
+        // 4. Fetch Daily Usage (for remaining episodes pill)
+        API.get("/api/auth/usage-status")
+          .then(res => {
+            if (active && res.data?.success) {
+              setDailyUsage({ count: res.data.count, limit: res.data.limit, subscription: res.data.subscription });
+            }
+          }).catch(() => {});
       } else {
         setSearchHistory([]);
+        setDailyUsage(null);
       }
       
       return () => { active = false; };
@@ -567,7 +585,18 @@ export default function HomeScreen({ navigation }) {
     // In a real app we'd navigate to the player, but for now Details is more consistent.
     navigation.navigate("Details", { id: item.id, title: item.title });
   }, [navigation]);
-
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // 🕵️‍♂️ Clear cache for all main sections to force fresh fetch
+    ["/api/anime/recent?page=1", "/api/anime/popular?page=1", "/api/anime/spotlight", "/api/anime/ongoing?page=1"].forEach(k => delete _cache[k]);
+    
+    await Promise.all([
+      fetchRecentEpisodes(), 
+      fetchGenres(), 
+      NotificationApi.getNotifications().then(res => { if (res.success) setUnreadCount(res.unreadCount); })
+    ]);
+    setRefreshing(false);
+  }, [fetchRecentEpisodes, fetchGenres]);
 
 
   const fetchSuggestions = useCallback(async (text) => {
@@ -670,8 +699,12 @@ export default function HomeScreen({ navigation }) {
       } else {
         Alert.alert("Error", res.data.error || "Failed to load episode info");
       }
-    } catch {
-      Alert.alert("Error", "Could not restore playback. Please try again.");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        Alert.alert("Error", "Could not restore playback. Please try again.");
+      }
     } finally {
       setPlayerLoading(false);
     }
@@ -682,12 +715,7 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate("Genre", { slug, title: name });
   }, [navigation]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    delete _cache["/api/anime/recent?page=1"];
-    await fetchRecentEpisodes();
-    setRefreshing(false);
-  }, [fetchRecentEpisodes]);
+
 
   const clearSearch = useCallback(() => {
     setQuery("");
@@ -730,10 +758,9 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.navContent}>
           <Animated.View style={{ transform: [{ scale: logoPulse }] }}>
             <View style={styles.logoRow}>
-              <View style={styles.logoIcon}>
-                <Ionicons name="flame-sharp" size={18} color={C.crimson} />
-              </View>
-              <Text style={styles.logo}>Animexis</Text>
+              <Text style={styles.logo}>
+                Anime<Text style={{ color: C.crimson }}>xis</Text>
+              </Text>
             </View>
           </Animated.View>
 
@@ -854,6 +881,7 @@ export default function HomeScreen({ navigation }) {
 
 
               <View style={styles.navRight}>
+
                 <TouchableOpacity
                   onPress={() => navigation.navigate("Notifications")}
                   style={styles.navIconBtn}
@@ -1313,18 +1341,7 @@ export default function HomeScreen({ navigation }) {
             </View>
             <View style={styles.genreWrapper}>
               {genres.map((name, index) => {
-                const colors = [
-                  "#ef4444", // Crimson
-                  "#f59e0b", // Amber
-                  "#10b981", // Emerald
-                  "#3b82f6", // Blue
-                  "#8b5cf6", // Violet
-                  "#ec4899", // Pink
-                  "#06b6d4", // Cyan
-                  "#f97316", // Orange
-                  "#a855f7", // Purple
-                  "#14b8a6", // Teal
-                ];
+                const colors = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316", "#a855f7", "#14b8a6"];
                 const textColor = colors[index % colors.length];
 
                 return (
@@ -1365,9 +1382,73 @@ export default function HomeScreen({ navigation }) {
       {playerLoading && (
         <View style={styles.loadingOverlay}>
           <DotCircleLoader size={54} color={C.crimson} />
-          <Text style={styles.loadingText}>Restoring playback…</Text>
+          <Text style={styles.loadingText}>Restoring your place…</Text>
         </View>
       )}
+
+      {/* ── DAILY LIMIT WARNING MODAL ── */}
+      <Modal
+        visible={showLimitModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLimitModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLimitModal(false)}
+        >
+          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.limitModal}>
+            {/* Glow accent */}
+            <LinearGradient
+              colors={[C.crimson, C.crimsonBright]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.limitModalAccent}
+            />
+
+            <View style={styles.limitIconWrap}>
+              <Ionicons name="warning" size={36} color={C.crimson} />
+            </View>
+
+            <Text style={styles.limitTitle}>Daily Limit Reached</Text>
+            <Text style={styles.limitSubtitle}>
+              You've watched{" "}
+              <Text style={{ color: C.crimson, fontWeight: "800" }}>20 / 20</Text>
+              {" "}episodes today.
+            </Text>
+            <Text style={styles.limitBody}>
+              Free accounts are limited to 20 unique episodes per day. Upgrade to{" "}
+              <Text style={{ color: C.crimsonBright, fontWeight: "700" }}>Premium</Text>
+              {" "}for unlimited, ad-free streaming!
+            </Text>
+
+            <TouchableOpacity
+              style={styles.limitUpgradeBtn}
+              onPress={() => {
+                setShowLimitModal(false);
+                navigation.navigate("Subscription");
+              }}
+            >
+              <LinearGradient
+                colors={[C.crimson, "#a00020"]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.limitUpgradeGradient}
+              >
+                <Ionicons name="diamond" size={16} color="white" />
+                <Text style={styles.limitUpgradeText}>Upgrade to Premium</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.limitDismissBtn}
+              onPress={() => setShowLimitModal(false)}
+            >
+              <Text style={styles.limitDismissText}>Maybe Later</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1496,10 +1577,10 @@ const styles = StyleSheet.create({
   heroGenreRow: { flexDirection: "row", gap: 6, marginBottom: 14, flexWrap: "wrap" },
   heroGenrePill: {
     paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 6, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 6, borderWidth: 1, borderColor: C.crimson + "60",
+    backgroundColor: "rgba(220,20,60,0.12)",
   },
-  heroGenreText: { fontSize: 10, fontWeight: "700", opacity: 0.95 },
+  heroGenreText: { fontSize: 10, fontWeight: "700", color: C.white },
 
   heroSpotlightDescription: { color: "rgba(255,255,255,0.7)", fontSize: 12, lineHeight: 18, marginBottom: 20 },
 
@@ -1812,7 +1893,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 3,
   },
-  navRight: { flexDirection: "row", alignItems: "center", gap: 12 },
+  usagePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 5,
+  },
+  usagePillFull: {
+    borderColor: "rgba(220,20,60,0.3)",
+    backgroundColor: "rgba(220,20,60,0.08)",
+  },
+  usagePillText: {
+    color: C.dim,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  usagePillTextFull: {
+    color: C.crimson,
+  },
+  navRight: { flexDirection: "row", alignItems: "center", gap: 14 },
   navIconBtn: { position: "relative", width: 36, height: 36, justifyContent: "center", alignItems: "center" },
   notifBadge: {
     position: "absolute",
@@ -1829,6 +1933,39 @@ const styles = StyleSheet.create({
     borderColor: C.bg
   },
   notifBadgeText: { color: C.white, fontSize: 8, fontWeight: "800" },
+
+  // Limit Modal Styles
+  limitModal: {
+    width: "85%",
+    maxWidth: 380,
+    backgroundColor: C.surface,
+    borderRadius: 28,
+    padding: 32,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
+  },
+  limitModalAccent: {
+    position: "absolute",
+    top: 0, left: 0, right: 0,
+    height: 4,
+  },
+  limitIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: "rgba(220,20,60,0.06)",
+    justifyContent: "center", alignItems: "center",
+    marginBottom: 20,
+  },
+  limitTitle: { color: C.white, fontSize: 22, fontWeight: "900", textAlign: "center", marginBottom: 8 },
+  limitSubtitle: { color: C.dim, fontSize: 14, fontWeight: "600", marginBottom: 16 },
+  limitBody: { color: "rgba(255,255,255,0.6)", fontSize: 13, lineHeight: 20, textAlign: "center", marginBottom: 30 },
+  limitUpgradeBtn: { width: "100%", height: 52, borderRadius: 16, overflow: "hidden" },
+  limitUpgradeGradient: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  limitUpgradeText: { color: C.white, fontSize: 15, fontWeight: "700" },
+  limitDismissBtn: { marginTop: 16, paddingVertical: 8 },
+  limitDismissText: { color: C.dimmer, fontSize: 13, fontWeight: "600" },
+
   logoRow: { flexDirection: "row", alignItems: "center", gap: 8 },
 
   heroMetaRow: {
@@ -1852,10 +1989,10 @@ const styles = StyleSheet.create({
     flexDirection: "row", gap: 6, marginBottom: 10, flexWrap: "wrap",
   },
   heroGenrePill: {
-    backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: C.glass,
+    backgroundColor: "rgba(220,20,60,0.12)", borderWidth: 1, borderColor: C.crimson + "60",
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
   },
-  heroGenrePillText: { color: C.dim, fontSize: 11, fontWeight: "700" },
+  heroGenreText: { color: C.white, fontSize: 11, fontWeight: "700" },
 
   paginationRow: {
     flexDirection: "row",

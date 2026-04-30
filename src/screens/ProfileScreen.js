@@ -633,8 +633,12 @@ export default function ProfileScreen({ navigation }) {
           {/* STATS ROW */}
           <Animated.View style={{ opacity: statsAnim }}>
             {statsLoading ? (
-              <View style={styles.statsLoading}>
-                <DotCircleLoader size={18} color={C.crimson} />
+              <View style={styles.statsRow}>
+                 {[1,2,3,4].map(i => (
+                   <View key={i} style={[styles.statCard, { backgroundColor: 'rgba(255,255,255,0.03)', overflow: 'hidden' }]}>
+                      <LinearGradient colors={["transparent", "rgba(255,255,255,0.05)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+                   </View>
+                 ))}
               </View>
             ) : (
               <View style={styles.statsRow}>
@@ -726,6 +730,7 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.menuCard}>
                 <MenuRow icon="time-outline" label="Watch History" sub="Episodes you've seen" onPress={() => navigation.navigate("WatchHistory")} />
                 <MenuRow icon="bookmark-outline" label="Watchlist" sub="Plan to watch & more" onPress={() => navigation.navigate("Watchlist")} />
+                <MenuRow icon="cloud-download-outline" label="Downloads" sub="Offline episodes" onPress={() => navigation.navigate("Downloads")} />
                 <MenuRow icon="heart-outline" label="Favorites" sub={`${favorites.length} items`} onPress={() => navigation.navigate("Favorites")} last />
               </View>
             </Section>

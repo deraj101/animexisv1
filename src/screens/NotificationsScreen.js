@@ -14,7 +14,7 @@ import { BlurView } from 'expo-blur';
 import { C } from '../theme';
 import * as NotificationApi from '../services/notificationApi';
 import API from '../services/api';
-import DotCircleLoader from '../components/DotCircleLoader';
+import { SkeletonList } from '../components/SkeletonGrid';
 
 const NotificationItem = ({ item, onPress }) => {
   const getIcon = () => {
@@ -146,9 +146,7 @@ export default function NotificationsScreen({ navigation }) {
       </BlurView>
 
       {loading && notifications.length === 0 ? (
-        <View style={styles.center}>
-          <DotCircleLoader size={54} color={C.crimson} />
-        </View>
+        <SkeletonList count={10} />
       ) : (
         <FlatList
           data={notifications}

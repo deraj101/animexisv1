@@ -24,6 +24,29 @@ import { C } from "../theme";
 import AppFooter from "../components/AppFooter";
 import DotCircleLoader from "../components/DotCircleLoader";
 
+function SkeletonStat() {
+  return (
+    <View style={{ width: '48%', height: 100, backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, overflow: 'hidden' }}>
+      <LinearGradient colors={["transparent", "rgba(255,255,255,0.05)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+    </View>
+  );
+}
+
+function SkeletonDashboard() {
+  return (
+    <View style={{ flex: 1, backgroundColor: C.bg, padding: 20 }}>
+      <View style={{ height: 200, backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 24, marginBottom: 30 }} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        <SkeletonStat />
+        <SkeletonStat />
+        <SkeletonStat />
+        <SkeletonStat />
+      </View>
+      <View style={{ height: 150, backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 16, marginTop: 30 }} />
+    </View>
+  );
+}
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 /**
  * Reads the JWT token from AsyncStorage.
@@ -916,15 +939,7 @@ export default function AdminDashboardScreen({ navigation }) {
   });
 
   if (loading) {
-    return (
-      <View style={styles.screen}>
-        <StatusBar style="light" />
-        <View style={styles.loadingWrap}>
-          <DotCircleLoader size={54} color={C.crimson} />
-          <Text style={styles.loadingText}>Loading dashboard…</Text>
-        </View>
-      </View>
-    );
+    return <SkeletonDashboard />;
   }
 
   const TABS = [
@@ -1173,7 +1188,9 @@ export default function AdminDashboardScreen({ navigation }) {
                         disabled={loadingMore}
                       >
                         {loadingMore ? (
-                          <DotCircleLoader size={18} color={C.crimson} />
+                          <View style={{ marginTop: 10 }}>
+                            <SkeletonGrid cardWidth={cardWidth} count={cols} />
+                          </View>
                         ) : (
                           <>
                             <Text style={styles.loadMoreText}>Load More</Text>

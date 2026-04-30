@@ -19,7 +19,7 @@ import { BlurView } from "expo-blur";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
 import API from "../services/api";
-import DotCircleLoader from "../components/DotCircleLoader";
+import { SkeletonList } from "../components/SkeletonGrid";
 
 const { width } = Dimensions.get("window");
 const STATUSES = ['All', 'Watching', 'Plan to Watch', 'Completed', 'On Hold', 'Dropped'];
@@ -141,8 +141,8 @@ export default function WatchlistScreen({ navigation }) {
       <LinearGradient colors={[C.void, C.bg]} style={StyleSheet.absoluteFill} />
       
       {loading ? (
-        <View style={styles.center}>
-          <DotCircleLoader size={40} color={C.crimson} />
+        <View style={{ paddingTop: 180 }}>
+          <SkeletonList count={10} />
         </View>
       ) : (
         <FlatList
