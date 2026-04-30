@@ -9,6 +9,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from "react-native";
+import { Analytics } from "@vercel/analytics/react";
 
 import LandingScreen from "./src/screens/LandingScreen";   // ← NEW
 import LoginScreen from "./src/screens/LoginScreen";
@@ -234,6 +235,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppContent linking={linking} />
+      {Platform.OS === 'web' && <Analytics />}
     </AuthProvider>
   );
 }
