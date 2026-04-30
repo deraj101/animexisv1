@@ -2,9 +2,9 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
-// Hardcoding IP for now to bypass .env issues in Expo Go
-const baseURL = 'http://10.124.88.17:3000';
-console.log('[API] FORCED baseURL:', baseURL);
+// Use env var if available (Vercel/Production), fallback to local IP for Expo Go
+const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://10.124.88.17:3000';
+console.log('[API] Using baseURL:', baseURL);
 
 const API = axios.create({ 
   baseURL,
