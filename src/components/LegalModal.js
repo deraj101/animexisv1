@@ -34,6 +34,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { C } from "../theme";
 
 // ─── PAGE CONTENT ─────────────────────────────────────────────────────────────
@@ -297,7 +298,7 @@ export default function LegalModal({ page, onClose, onAccept }) {
               }}
             >
               <LinearGradient
-                colors={[C.crimsonText, C.crimson]}
+                colors={[C.crimsonBright, C.crimson]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={styles.acceptBtnGrad}
               >

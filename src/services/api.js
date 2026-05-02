@@ -8,7 +8,7 @@ console.log('[API] Using baseURL:', baseURL);
 
 const API = axios.create({ 
   baseURL,
-  timeout: 30000 // 30s default
+  timeout: 60000 // 60s default (handles Render spin-up)
 });
 
 // Dedicated instance for slow scraping tasks
