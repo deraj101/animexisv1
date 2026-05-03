@@ -321,7 +321,7 @@ export default function ProfileScreen({ navigation }) {
             });
           } else {
             const base64 = await FileSystem.readAsStringAsync(uri, {
-              encoding: FileSystem.EncodingType.Base64,
+              encoding: 'base64',
             });
             const rawExt = uri.split('.').pop()?.split('?')[0].toLowerCase() || 'jpg';
             const ext = ['jpg','jpeg','png'].includes(rawExt) ? rawExt : 'jpg';

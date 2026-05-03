@@ -384,6 +384,9 @@ export default function AdminDashboardScreen({ navigation }) {
   const [customAnimes, setCustomAnimes] = useState([]);
   const [allComments, setAllComments]   = useState([]);
   
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [subRequests, setSubRequests] = useState([]);
+  
   // UI States for Forms & Modals
   const [userEditModal, setUserEditModal] = useState(null); // { email, name, subscription }
   const [animeModal, setAnimeModal] = useState(null); // { slug, title, ... }
@@ -429,7 +432,7 @@ export default function AdminDashboardScreen({ navigation }) {
     const cfg = { headers: authHeader };
 
     try {
-      const [statsRes, animeRes, usersRes, activityRes, visitsRes, reportsRes, customRes, commentsRes] = await Promise.allSettled([
+      const [statsRes, animeRes, usersRes, activityRes, visitsRes, reportsRes, customRes, commentsRes, pendingUsersRes, subRequestsRes] = await Promise.allSettled([
         API.get("/api/admin/stats",        cfg),
         API.get("/api/admin/top-anime",    cfg),
         API.get("/api/admin/recent-users?limit=50", cfg),
@@ -437,7 +440,9 @@ export default function AdminDashboardScreen({ navigation }) {
         API.get("/api/admin/monthly-visits", cfg),
         API.get("/api/admin/reports", cfg),
         API.get("/api/admin/anime", cfg),
-        API.get("/api/admin/comments/all", cfg)
+        API.get("/api/admin/comments/all", cfg),
+        API.get("/api/admin/pending-verifications", cfg),
+        API.get("/api/admin/subscription-requests", cfg)
       ]);
 
       if (statsRes.status === "fulfilled") {
@@ -482,6 +487,13 @@ export default function AdminDashboardScreen({ navigation }) {
       if (commentsRes.status === "fulfilled" && commentsRes.value.data) {
         setAllComments(commentsRes.value.data.comments || []);
       }
+
+      if (pendingUsersRes?.status === "fulfilled") {
+        setPendingUsers(pendingUsersRes.value.data.users || []);
+      }
+      if (subRequestsRes?.status === "fulfilled") {
+        setSubRequests(subRequestsRes.value.data.requests || []);
+      }
     } catch (err) {
       setApiError(err.message || "Failed to load dashboard data.");
     } finally {
@@ -489,6 +501,43 @@ export default function AdminDashboardScreen({ navigation }) {
       setRefreshing(false);
     }
   }, []);
+
+  // ── New Handlers ──────────────────────────────────────────────────────────
+  const handleApproveUser = async (email) => {
+    try {
+      const cfg = { headers: await getAuthHeader() };
+      await API.post(`/api/admin/verify-user/${encodeURIComponent(email)}`, {}, cfg);
+      setPendingUsers(prev => prev.filter(u => u.email !== email));
+      if (Platform.OS === 'web') {
+        window.alert(`User ${email} verified.`);
+      } else {
+        Alert.alert("Success", `User ${email} verified.`);
+      }
+      // Also update recent users if they are there
+      setRecentUsers(prev => prev.map(u => u.email === email ? { ...u, account_status: 'active', is_verified: true } : u));
+    } catch (err) { 
+      if (Platform.OS === 'web') window.alert("Error: Failed to verify user.");
+      else Alert.alert("Error", "Failed to verify user."); 
+    }
+  };
+
+  const handleProcessSub = async (id, status, note = "") => {
+    try {
+      const cfg = { headers: await getAuthHeader() };
+      const endpoint = status === 'approved' ? 'approve' : 'reject';
+      await API.post(`/api/admin/subscription-requests/${id}/${endpoint}`, { adminNote: note }, cfg);
+      setSubRequests(prev => prev.filter(r => r._id !== id));
+      if (Platform.OS === 'web') {
+        window.alert(`Subscription request ${status}.`);
+      } else {
+        Alert.alert("Success", `Subscription request ${status}.`);
+      }
+      if (status === 'approved') fetchAll(true); // Refresh all to see premium status
+    } catch (err) { 
+      if (Platform.OS === 'web') window.alert(`Error: Failed to ${status} subscription.`);
+      else Alert.alert("Error", `Failed to ${status} subscription.`); 
+    }
+  };
 
   // ── Animations ────────────────────────────────────────────────────────────
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -668,6 +717,7 @@ export default function AdminDashboardScreen({ navigation }) {
         const cfg = { headers: await getAuthHeader() };
         await API.delete(`/api/admin/users/${encodeURIComponent(email)}`, cfg);
         setRecentUsers(prev => prev.filter(u => u.email !== email));
+        setPendingUsers(prev => prev.filter(u => u.email !== email)); // Update pending list too
         if (Platform.OS === 'web') {
            window.alert(`User ${email} deleted.`);
         } else {
@@ -944,8 +994,11 @@ export default function AdminDashboardScreen({ navigation }) {
 
   const TABS = [
     { key: "overview", label: "Overview", icon: "grid-outline" },
-    { key: "users",    label: "Users",    icon: "people-outline",
-      badge: recentUsers.length > 0 ? recentUsers.length : null, badgeColor: "#3b82f6" },
+    { key: "users",    label: "Users",    icon: "people-outline" },
+    { key: "verification", label: "Verify", icon: "shield-checkmark-outline",
+      badge: pendingUsers.length > 0 ? pendingUsers.length : null, badgeColor: C.crimson },
+    { key: "subscriptions", label: "Payments", icon: "cash-outline",
+      badge: subRequests.length > 0 ? subRequests.length : null, badgeColor: "#22c55e" },
     { key: "cms", label: "Content", icon: "film-outline" },
     { key: "comments", label: "Comments", icon: "chatbox-ellipses-outline" },
     { key: "announcements", label: "Announce", icon: "megaphone-outline" },
@@ -1269,6 +1322,95 @@ export default function AdminDashboardScreen({ navigation }) {
                       onDeleteUser={handleDeleteUser}
                       onEditUser={(data) => setUserEditModal(data)}
                     />
+                  ))
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* ═══════════ VERIFICATION TAB ═══════════ */}
+          {activeTab === "verification" && (
+            <View style={styles.body}>
+              <SectionHeader title={`Pending Verification (${pendingUsers.length})`} icon="shield-checkmark-outline" />
+              <View style={styles.panel}>
+                {pendingUsers.length === 0 ? (
+                  <Text style={styles.emptyText}>No users waiting for verification.</Text>
+                ) : (
+                  pendingUsers.map((u, i) => (
+                    <View key={u.email || i} style={[styles.userRow, i < pendingUsers.length - 1 && styles.userRowBorder]}>
+                      <View style={styles.userAvatar}>
+                        <Text style={styles.userAvatarLetter}>{u.email[0].toUpperCase()}</Text>
+                      </View>
+                      <View style={styles.userInfo}>
+                        <Text style={styles.userEmail}>{u.email}</Text>
+                        <Text style={styles.userMeta}>Joined {u.joinedAgo}</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity 
+                          style={[styles.addBtn, { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.3)' }]}
+                          onPress={() => handleApproveUser(u.email)}
+                        >
+                          <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+                          <Text style={[styles.addBtnText, { color: "#22c55e" }]}>Approve</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                          style={[styles.addBtn, { backgroundColor: 'rgba(220,20,60,0.1)', borderColor: 'rgba(220,20,60,0.3)' }]}
+                          onPress={() => handleDeleteUser(u.email)}
+                        >
+                          <Ionicons name="close-circle" size={16} color="#DC143C" />
+                          <Text style={[styles.addBtnText, { color: "#DC143C" }]}>Decline</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* ═══════════ SUBSCRIPTIONS TAB ═══════════ */}
+          {activeTab === "subscriptions" && (
+            <View style={styles.body}>
+              <SectionHeader title={`Subscription Requests (${subRequests.length})`} icon="cash-outline" />
+              <View style={styles.panel}>
+                {subRequests.length === 0 ? (
+                  <Text style={styles.emptyText}>No pending subscription requests.</Text>
+                ) : (
+                  subRequests.map((req, i) => (
+                    <View key={req._id || i} style={[styles.actRow, i < subRequests.length - 1 && styles.actRowBorder]}>
+                      <View style={styles.actInfo}>
+                        <Text style={styles.actTitle}>{req.userEmail}</Text>
+                        <Text style={styles.actSub}>
+                          {req.paymentMethod} · Ref: {req.referenceNumber} · {req.amount} PHP
+                        </Text>
+                        <Text style={styles.actTime}>{new Date(req.createdAt).toLocaleString()}</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity 
+                          style={[styles.miniActionBtn, { borderColor: 'rgba(34,197,94,0.3)' }]}
+                          onPress={() => handleProcessSub(req._id, 'approved')}
+                        >
+                          <Ionicons name="checkmark" size={14} color="#22c55e" />
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={[styles.miniActionBtn, { borderColor: 'rgba(220,20,60,0.3)' }]}
+                          onPress={() => {
+                            if (Platform.OS === 'web') {
+                              const note = window.prompt("Reason for rejection?");
+                              if (note !== null) handleProcessSub(req._id, 'rejected', note);
+                            } else {
+                              Alert.prompt("Reject Request", "Reason for rejection?", [
+                                { text: "Cancel", style: "cancel" },
+                                { text: "Reject", style: "destructive", onPress: (note) => handleProcessSub(req._id, 'rejected', note) }
+                              ]);
+                            }
+                          }}
+                        >
+                          <Ionicons name="close" size={14} color={C.crimson} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   ))
                 )}
               </View>

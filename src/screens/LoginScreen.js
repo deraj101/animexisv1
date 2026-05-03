@@ -249,6 +249,8 @@ export default function LoginScreen({ navigation }) {
             profile_image: res.data.profile_image  || null,
             profile_border:res.data.profile_border || null,
             subscription:  res.data.subscription   || 'free',
+            account_status:res.data.account_status || 'active',
+            is_verified:   !!res.data.is_verified,
           });
         } else {
           setError(res.data.message || "Sign-in failed.");
@@ -308,6 +310,8 @@ export default function LoginScreen({ navigation }) {
           profile_image: res.data.profile_image  || null,
           profile_border:res.data.profile_border || null,
           subscription:  res.data.subscription   || 'free',
+          account_status:res.data.account_status || 'active',
+          is_verified:   !!res.data.is_verified,
         });
       } else {
         setError(res.data.message || "Invalid or expired code.");
@@ -361,6 +365,8 @@ export default function LoginScreen({ navigation }) {
           profile_image: res.data.profile_image  || null,
           profile_border:res.data.profile_border || null,
           subscription:  res.data.subscription   || 'free',
+          account_status:res.data.account_status || 'active',
+          is_verified:   !!res.data.is_verified,
         });
       } else {
         setError(res.data.message || "Reset failed. Please try again.");

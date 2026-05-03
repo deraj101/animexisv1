@@ -31,6 +31,7 @@ import WatchHistoryScreen from "./src/screens/WatchHistoryScreen"; // 🎬 NEW
 import FavoritesScreen from "./src/screens/FavoritesScreen"; // ❤️ NEW
 import WatchlistScreen from "./src/screens/WatchlistScreen"; // 🔖 NEW
 import DownloadsScreen from "./src/screens/DownloadsScreen"; // 📥 NEW
+import PendingApprovalScreen from "./src/screens/PendingApprovalScreen"; // 🛡️ NEW
 
 
 
@@ -109,11 +110,7 @@ function AppNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (
-        // ── UNAUTHENTICATED: Landing → Login ──────────────────────────────────
-        // Landing is the first screen. Both "Log In" and "Start Free Trial"
-        // buttons call navigation.navigate("Login") which goes straight to
-        // LoginScreen (email input → OTP flow).
-        <>
+        <Stack.Group>
           <Stack.Screen
             name="Landing"
             component={LandingScreen}
@@ -124,10 +121,13 @@ function AppNavigator() {
             component={LoginScreen}
             options={{ animation: "slide_from_right" }}
           />
-        </>
+        </Stack.Group>
+      ) : user.account_status === 'pending' ? (
+        <Stack.Group>
+          <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
+        </Stack.Group>
       ) : (
-        // ── AUTHENTICATED ─────────────────────────────────────────────────────
-        <>
+        <Stack.Group>
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="Details" component={DetailsScreen} />
           <Stack.Screen name="Genre" component={GenreScreen} />
@@ -152,9 +152,7 @@ function AppNavigator() {
           <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="Watchlist" component={WatchlistScreen} options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="Downloads" component={DownloadsScreen} options={{ animation: "slide_from_right" }} />
-
-
-        </>
+        </Stack.Group>
       )}
     </Stack.Navigator>
   );

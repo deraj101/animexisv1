@@ -4,6 +4,8 @@ import { Alert, Platform } from 'react-native';
 
 const DOWNLOADS_KEY = 'animexis_offline_downloads';
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.124.88.17:3000';
+const DOWNLOAD_FORMAT_VERSION = 2;
 
 class DownloadService {
     constructor() {
@@ -60,6 +62,9 @@ class DownloadService {
         const urlWithoutQuery = videoUrl.split('?')[0];
         const lastPart = urlWithoutQuery.split('.').pop().toLowerCase();
         
+        if (videoUrl.includes('/download-m3u8') && videoUrl.includes('format=ts')) {
+            fileExt = 'ts';
+        } else
         if (['mp4', 'mkv', 'webm', 'm3u8', 'mov', 'avi'].includes(lastPart)) {
             fileExt = lastPart;
         }
@@ -72,34 +77,43 @@ class DownloadService {
         const fileUri = DOWNLOAD_DIR + fileName;
 
         const callback = (downloadProgress) => {
-            const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+            const expected = downloadProgress.totalBytesExpectedToWrite;
+            const written = downloadProgress.totalBytesWritten || 0;
+            const progress = expected > 0
+                ? written / expected
+                : Math.min(0.95, 0.02 + Math.log10((written / 100000) + 1) * 0.35);
             if (onProgress) onProgress(progress);
         };
 
         // 🚀 NEW: Get JWT token to authenticate the download proxy request
         let authToken = '';
-        try {
-            const rawAuth = await AsyncStorage.getItem("auth_user");
-            if (rawAuth) {
-                const parsed = JSON.parse(rawAuth);
-                if (parsed.token) {
-                    authToken = `Bearer ${parsed.token}`;
+        if (this._isOwnApiUrl(videoUrl)) {
+            try {
+                const rawAuth = await AsyncStorage.getItem("auth_user");
+                if (rawAuth) {
+                    const parsed = JSON.parse(rawAuth);
+                    if (parsed.token) {
+                        authToken = `Bearer ${parsed.token}`;
+                    }
                 }
+            } catch (e) {
+                console.error("Failed to read auth token for download:", e);
             }
-        } catch (e) {
-            console.error("Failed to read auth token for download:", e);
+        }
+
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ...(authToken ? { 'Authorization': authToken } : {})
+        };
+
+        if (!this._isOwnApiUrl(videoUrl)) {
+            headers.Referer = videoUrl.split('/').slice(0, 3).join('/');
         }
 
         const downloadResumable = FileSystem.createDownloadResumable(
             videoUrl,
             fileUri,
-            {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Referer': videoUrl.split('/').slice(0, 3).join('/'),
-                    ...(authToken ? { 'Authorization': authToken } : {})
-                }
-            },
+            { headers },
             callback
         );
 
@@ -108,6 +122,7 @@ class DownloadService {
 
         try {
             const { uri } = await downloadResumable.downloadAsync();
+            if (onProgress) onProgress(1);
             
             // 🚀 NEW: Verify file size
             const fileInfo = await FileSystem.getInfoAsync(uri);
@@ -126,6 +141,7 @@ class DownloadService {
                 localUri: uri,
                 fileSize: fileInfo.size,
                 status: 'completed',
+                formatVersion: DOWNLOAD_FORMAT_VERSION,
                 downloadedAt: Date.now()
             };
 
@@ -166,15 +182,20 @@ class DownloadService {
         return `${animeId}_ep${epNumber}`;
     }
 
+    _isOwnApiUrl(url) {
+        return !!url && !!API_BASE_URL && url.startsWith(API_BASE_URL);
+    }
+
     async isBroken(item) {
         try {
             if (Platform.OS === 'web') return false;
             const info = await FileSystem.getInfoAsync(item.localUri);
             if (!info.exists) return true;
+            if ((item.formatVersion || 1) < DOWNLOAD_FORMAT_VERSION) return true;
             // 0.0MB or very small files are broken
             if (info.size < 1024 * 100) return true; 
             return false;
-        } catch (e) {
+        } catch {
             return true;
         }
     }

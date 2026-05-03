@@ -18,7 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import API, { API_LONG } from "../services/api";
+import API from "../services/api";
 import { C } from "../theme";
 import AppFooter from "../components/AppFooter";
 import { useAuth } from "../context/AuthContext";
@@ -254,6 +254,7 @@ export default function DetailsScreen({ route, navigation }) {
   const [episodeProgress, setEpisodeProgress] = useState(null); // { episode_number, progress, duration }
 
   const shimmerX = useRef(new Animated.Value(0)).current;
+  const prefetchedEpisodeUrlsRef = useRef(new Set());
 
   useEffect(() => {
     Animated.loop(
@@ -287,6 +288,22 @@ export default function DetailsScreen({ route, navigation }) {
     const found = episodeRanges.find(r => r.index === activeRange) || episodeRanges[0];
     return isReversed ? [...found.data].reverse() : found.data;
   }, [episodeRanges, activeRange, isReversed]);
+
+  useEffect(() => {
+    if (user?.subscription?.toLowerCase() !== 'premium' || activeRangeData.length === 0) return;
+
+    const timer = setTimeout(() => {
+      activeRangeData.slice(0, 4).forEach((episode, index) => {
+        if (!episode.url || prefetchedEpisodeUrlsRef.current.has(episode.url)) return;
+        prefetchedEpisodeUrlsRef.current.add(episode.url);
+        setTimeout(() => {
+          API.get(`/api/anime/episode-info?url=${encodeURIComponent(episode.url)}`).catch(() => {});
+        }, index * 1200);
+      });
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [activeRangeData, user?.subscription]);
 
   const fadeIn  = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(30)).current;
@@ -446,33 +463,10 @@ export default function DetailsScreen({ route, navigation }) {
     if (downloadingEps[episode.number] !== undefined) return;
 
     try {
-      // Show "finding links" state (progress = -1 means searching)
-      setDownloadingEps(p => ({ ...p, [episode.number]: -1 }));
+      setDownloadingEps(p => ({ ...p, [episode.number]: 0 }));
 
       let directUrl = null;
-
-      // ── STEP 1: Try AnimePahe for direct MP4 ──────────────────────────────
-      try {
-        console.log(`[Download] 🔍 Searching AnimePahe for: ${anime?.title} Ep ${episode.number}`);
-        const paheRes = await API_LONG.get('/api/anime/pahe-sources', {
-          params: { title: anime?.title || initialTitle, episode: episode.number }
-        });
-
-        if (paheRes.data.success && paheRes.data.sources?.length > 0) {
-          // Find a resolved direct MP4 (not an embed)
-          const directSource = paheRes.data.sources.find(s => !s.isEmbed && !s.isKwik);
-          if (directSource) {
-            directUrl = directSource.url;
-            console.log(`[Download] ✅ AnimePahe MP4: ${directUrl.substring(0, 60)}...`);
-          }
-        }
-      } catch (paheErr) {
-        console.log(`[Download] ⚠️ AnimePahe failed: ${paheErr.message}`);
-      }
-
-      // ── STEP 2: Fallback to Gogo sources ──────────────────────────────────
-      // User requested to use ONLY AnimePahe for downloading.
-      /*
+      // Use the regular episode sources directly.
       if (!directUrl) {
         console.log('[Download] 🔄 Falling back to Gogo sources...');
         const res = await API.get(`/api/anime/episode-info?url=${encodeURIComponent(episode.url)}`);
@@ -486,18 +480,18 @@ export default function DetailsScreen({ route, navigation }) {
           });
 
           if (mp4Source) {
-            directUrl = mp4Source.url || mp4Source;
+            const fileUrl = mp4Source.url || mp4Source;
+            directUrl = `${API.defaults.baseURL}/api/anime/download-file?url=${encodeURIComponent(fileUrl)}`;
           } else {
             // HLS fallback — use backend proxy
             const hlsSource = videoSources.find(s => (s.url || s).toLowerCase().includes('.m3u8'));
             if (hlsSource) {
-              const streamUrl = hlsSource.url || hlsSource;
-              directUrl = `${API.defaults.baseURL}/api/anime/download-m3u8?url=${encodeURIComponent(streamUrl)}`;
-            }
+            const streamUrl = hlsSource.url || hlsSource;
+            directUrl = `${API.defaults.baseURL}/api/anime/download-m3u8?format=ts&url=${encodeURIComponent(streamUrl)}`;
+          }
           }
         }
       }
-      */
 
       if (!directUrl) {
         Alert.alert("Error", "No downloadable source found for this episode.");
