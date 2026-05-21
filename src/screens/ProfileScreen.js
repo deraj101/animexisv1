@@ -8,6 +8,7 @@ import {
   Dimensions,
   Platform,
   Alert,
+  Modal,
   ScrollView,
   Switch,
   TextInput,
@@ -21,6 +22,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
 import { Image } from "expo-image";
+import * as Clipboard from "expo-clipboard";
 import * as FileSystem from 'expo-file-system'; // 📂 PROPER IMPORT
 import PremiumBorder from "../components/PremiumBorder"; // 🎨 NEW
 import AppFooter from "../components/AppFooter";
@@ -159,7 +161,7 @@ export default function ProfileScreen({ navigation }) {
   const [liveStats, setLiveStats] = useState({
     episodes: "—", watchTime: "—", favCount: "—", avgRating: "—",
   });
-  const [usage, setUsage] = useState({ count: 0, limit: 20, subscription: 'free' });
+  const [usage, setUsage] = useState({ count: 0, limit: 20, subscription: user?.subscription || 'free' });
   const [profileBorder, setProfileBorder] = useState(user?.profile_border || null); // 🎨 NEW
   const [borderSaving, setBorderSaving] = useState(false); // 🎨 NEW
 
@@ -173,6 +175,12 @@ export default function ProfileScreen({ navigation }) {
     hd: false,
     subtitles: true,
   });
+
+  // Secure hash modal
+  const [hashModalVisible, setHashModalVisible] = useState(false);
+  const [hashLoading, setHashLoading] = useState(false);
+  const [secureHashes, setSecureHashes] = useState(null);
+  const [copiedHash, setCopiedHash] = useState(null);
 
   // Animations
   const heroAnim = useRef(new Animated.Value(0)).current;
@@ -386,6 +394,38 @@ export default function ProfileScreen({ navigation }) {
   }, [user?.email]);
 
   // ── Sign out ─────────────────────────────────────────────────────────────────
+  const handleGenerateSecureHashes = useCallback(async () => {
+    if (!user?.email) return;
+    setHashLoading(true);
+    setHashModalVisible(true);
+    setCopiedHash(null);
+    try {
+      const res = await API.get("/api/auth/secure-hashes");
+      if (!res.data?.success) throw new Error(res.data?.message || "Hash generation failed.");
+      setSecureHashes({
+        emailHash: res.data.email_hash,
+        passwordHash: res.data.password_hash,
+        emailAlgorithm: res.data.email_algorithm || "SHA-256",
+        passwordAlgorithm: res.data.password_algorithm || "bcrypt",
+      });
+    } catch (err) {
+      setHashModalVisible(false);
+      Alert.alert("Hash Error", err.response?.data?.message || err.message || "Could not load secure hashes.");
+    } finally {
+      setHashLoading(false);
+    }
+  }, [user?.email]);
+
+  const handleCopyHash = useCallback(async (label, value) => {
+    if (!value) return;
+    try {
+      await Clipboard.setStringAsync(value);
+      setCopiedHash(label);
+    } catch {
+      Alert.alert("Copy failed", "Could not copy this hash to the clipboard.");
+    }
+  }, []);
+
   const handleSignOut = useCallback(async () => {
     const confirmed = Platform.OS === "web"
       ? window.confirm("Sign out?")
@@ -737,6 +777,21 @@ export default function ProfileScreen({ navigation }) {
 
           </Animated.View>
 
+          {/* SECURITY & LAB DOCS */}
+          <Animated.View style={{ opacity: menuAnim }}>
+            <Section title="Academic Defense">
+              <View style={styles.menuCard}>
+                <MenuRow 
+                  icon="shield-checkmark-outline" 
+                  label="Security & PC3211 Lab" 
+                  sub="PC3211 Rubrics & Live Sandbox Proof" 
+                  onPress={() => navigation.navigate("SecurityDocs")} 
+                  last 
+                />
+              </View>
+            </Section>
+          </Animated.View>
+
           {/* ACCOUNT */}
 
           <Animated.View style={{ opacity: menuAnim }}>
@@ -744,6 +799,32 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.menuCard}>
                 <MenuRow icon="person-outline" label="Username" sub={username} onPress={() => { setNameInput(username); setEditingName(true); }} />
                 <MenuRow icon="mail-outline" label="Email" sub={user?.email} onPress={() => { }} />
+
+                <TouchableOpacity
+                  style={styles.hashButton}
+                  onPress={handleGenerateSecureHashes}
+                  activeOpacity={0.88}
+                >
+                  <LinearGradient
+                    colors={["rgba(220,20,60,0.95)", "rgba(120,20,45,0.95)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.hashButtonGradient}
+                  >
+                    <View style={styles.hashButtonIcon}>
+                      <Ionicons name="shield-checkmark" size={18} color={C.white} />
+                    </View>
+                    <View style={styles.hashButtonTextWrap}>
+                      <Text style={styles.hashButtonTitle}>Generate Secure Hash</Text>
+                      <Text style={styles.hashButtonSub}>Email SHA-256 and database password hash</Text>
+                    </View>
+                    {hashLoading ? (
+                      <DotCircleLoader size={18} color={C.white} />
+                    ) : (
+                      <Ionicons name="key-outline" size={18} color={C.white} />
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
 
                 <MenuRow
                   icon="star-outline"
@@ -759,6 +840,77 @@ export default function ProfileScreen({ navigation }) {
           <AppFooter />
         </View>
       </Animated.ScrollView>
+
+      <Modal
+        visible={hashModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setHashModalVisible(false)}
+      >
+        <View style={styles.hashModalBackdrop}>
+          <View style={styles.hashModalCard}>
+            <View style={styles.hashModalHeader}>
+              <View style={styles.hashModalIcon}>
+                <Ionicons name="finger-print" size={22} color={C.crimson} />
+              </View>
+              <View style={styles.hashModalTitleWrap}>
+                <Text style={styles.hashModalTitle}>Secure Hashes</Text>
+                <Text style={styles.hashModalSub}>Matched to your stored account record</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.hashModalClose}
+                onPress={() => setHashModalVisible(false)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="close" size={18} color={C.dim} />
+              </TouchableOpacity>
+            </View>
+
+            {hashLoading ? (
+              <View style={styles.hashLoadingWrap}>
+                <DotCircleLoader size={26} color={C.crimson} />
+                <Text style={styles.hashLoadingText}>Generating hashes...</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.hashBlock}>
+                  <View style={styles.hashBlockHeader}>
+                    <View>
+                      <Text style={styles.hashLabel}>Email Hash</Text>
+                      <Text style={styles.hashAlgorithm}>{secureHashes?.emailAlgorithm}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.copyHashBtn}
+                      onPress={() => handleCopyHash("email", secureHashes?.emailHash)}
+                    >
+                      <Ionicons name={copiedHash === "email" ? "checkmark" : "copy-outline"} size={15} color={C.white} />
+                      <Text style={styles.copyHashText}>{copiedHash === "email" ? "Copied" : "Copy"}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.hashValue} selectable>{secureHashes?.emailHash || "Unavailable"}</Text>
+                </View>
+
+                <View style={styles.hashBlock}>
+                  <View style={styles.hashBlockHeader}>
+                    <View>
+                      <Text style={styles.hashLabel}>Password Hash</Text>
+                      <Text style={styles.hashAlgorithm}>{secureHashes?.passwordAlgorithm || "Database value"}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.copyHashBtn}
+                      onPress={() => handleCopyHash("password", secureHashes?.passwordHash)}
+                    >
+                      <Ionicons name={copiedHash === "password" ? "checkmark" : "copy-outline"} size={15} color={C.white} />
+                      <Text style={styles.copyHashText}>{copiedHash === "password" ? "Copied" : "Copy"}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.hashValue} selectable>{secureHashes?.passwordHash || "No password hash stored"}</Text>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -854,6 +1006,31 @@ const styles = StyleSheet.create({
   menuLabel: { color: C.white, fontSize: 14, fontWeight: "600" },
   menuLabelDanger: { color: C.crimson },
   menuSub: { color: C.dim, fontSize: 11, marginTop: 1 },
+
+  hashButton: { margin: 12, borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: C.crimsonBorder },
+  hashButtonGradient: { minHeight: 70, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  hashButtonIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.14)", justifyContent: "center", alignItems: "center" },
+  hashButtonTextWrap: { flex: 1 },
+  hashButtonTitle: { color: C.white, fontSize: 14, fontWeight: "800" },
+  hashButtonSub: { color: "rgba(255,255,255,0.72)", fontSize: 11, marginTop: 2, lineHeight: 15 },
+
+  hashModalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", justifyContent: "center", padding: 18 },
+  hashModalCard: { backgroundColor: C.surface, borderRadius: 20, borderWidth: 1, borderColor: C.border, padding: 16, shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 22, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
+  hashModalHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+  hashModalIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: C.crimsonDim, borderWidth: 1, borderColor: C.crimsonBorder, justifyContent: "center", alignItems: "center" },
+  hashModalTitleWrap: { flex: 1 },
+  hashModalTitle: { color: C.white, fontSize: 18, fontWeight: "800" },
+  hashModalSub: { color: C.dim, fontSize: 11, marginTop: 2 },
+  hashModalClose: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.surfaceHigh, borderWidth: 1, borderColor: C.border, justifyContent: "center", alignItems: "center" },
+  hashLoadingWrap: { minHeight: 170, justifyContent: "center", alignItems: "center", gap: 12 },
+  hashLoadingText: { color: C.dim, fontSize: 13, fontWeight: "600" },
+  hashBlock: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 12, marginTop: 10 },
+  hashBlockHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 },
+  hashLabel: { color: C.white, fontSize: 13, fontWeight: "800" },
+  hashAlgorithm: { color: C.dim, fontSize: 10, marginTop: 2, textTransform: "uppercase", fontWeight: "700" },
+  hashValue: { color: C.white, fontSize: 11, lineHeight: 17, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  copyHashBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.crimson, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7 },
+  copyHashText: { color: C.white, fontSize: 11, fontWeight: "800" },
 
   footer: { alignItems: "center", paddingVertical: 24, gap: 4 },
   footerText: { color: C.dimmer, fontSize: 12, fontWeight: "600" },

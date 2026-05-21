@@ -14,6 +14,7 @@ import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
 import LegalModal from "../components/LegalModal";
@@ -224,6 +225,7 @@ function PulsingButton({ onPress, children, style }) {
 
 // ─── LANDING SCREEN ───────────────────────────────────────────────────────────
 export default function LandingScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user, loading: authLoading } = useAuth();
   const [showLegal, setShowLegal] = useState(false);
   const heroOpacity  = useRef(new Animated.Value(0)).current;
@@ -286,25 +288,36 @@ export default function LandingScreen({ navigation }) {
       <StatusBar style="light" />
 
       {/* ── STICKY NAV ── */}
-      <View style={styles.nav}>
-        <View style={styles.navLogo}>
-          <Text style={styles.navLogoText}>
-            ANIME<Text style={{ color: C.crimson }}>XIS</Text>
-          </Text>
-        </View>
-        <View style={styles.navActions}>
-          <TouchableOpacity style={styles.navBtnGhost} onPress={goToLogin} activeOpacity={0.8}>
-            <Text style={styles.navBtnGhostText}>Log In</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navBtnPrimary} onPress={goToLogin} activeOpacity={0.8}>
-            <Text style={styles.navBtnPrimaryText}>Join Now</Text>
-          </TouchableOpacity>
+      <View style={[styles.nav, { height: NAV_H + insets.top, paddingTop: insets.top }]}>
+        <LinearGradient
+          colors={["rgba(8,8,9,0.98)", "rgba(16,10,14,0.96)"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.navInner}>
+          <View style={styles.navLogo}>
+            <View style={styles.navLogoIcon}>
+              <Ionicons name="flame" size={16} color={C.crimson} />
+            </View>
+            <Text style={styles.navLogoText} numberOfLines={1}>
+              ANIME<Text style={{ color: C.crimson }}>XIS</Text>
+            </Text>
+          </View>
+          <View style={styles.navActions}>
+            <TouchableOpacity style={styles.navBtnGhost} onPress={goToLogin} activeOpacity={0.8}>
+              <Text style={styles.navBtnGhostText}>Log In</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navBtnPrimary} onPress={goToLogin} activeOpacity={0.8}>
+              <Text style={styles.navBtnPrimaryText}>{isCompactMobile ? "Join" : "Join Now"}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingTop: 64 }}
+        contentContainerStyle={{ paddingTop: NAV_H + insets.top }}
         showsVerticalScrollIndicator={false}
       >
 
@@ -558,7 +571,7 @@ export default function LandingScreen({ navigation }) {
         </View>
 
         {/* ── FOOTER ── */}
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(40, insets.bottom + 16) }]}>
           <View style={styles.footerLogo}>
             <Text style={styles.navLogoText}>
               ANIME<Text style={{ color: C.crimson }}>XIS</Text>
@@ -596,38 +609,57 @@ export default function LandingScreen({ navigation }) {
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const isTablet = W >= 768;
+const isCompactMobile = W < 390;
 const PAD = isTablet ? 40 : 20;
+const NAV_H = isTablet ? 72 : 68;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
 
   nav: {
     position: "absolute", top: 0, left: 0, right: 0, zIndex: 100,
-    height: 64,
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: PAD,
-    backgroundColor: "rgba(8,8,9,0.9)",
+    overflow: "hidden",
     borderBottomWidth: 1, borderBottomColor: C.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
-  navLogo: { flexDirection: "row", alignItems: "center", gap: 8 },
+  navInner: {
+    flex: 1,
+    minHeight: NAV_H,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: isCompactMobile ? 14 : PAD,
+    gap: 10,
+  },
+  navLogo: { flexDirection: "row", alignItems: "center", gap: isCompactMobile ? 7 : 9, flexShrink: 1 },
   navLogoIcon: {
-    width: 30, height: 30, borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1, borderColor: C.glass,
+    width: isCompactMobile ? 30 : 34, height: isCompactMobile ? 30 : 34, borderRadius: 11,
+    backgroundColor: "rgba(220,20,60,0.12)",
+    borderWidth: 1, borderColor: C.crimsonBorder,
     alignItems: "center", justifyContent: "center",
   },
-  navLogoText: { fontWeight: "800", fontSize: 18, color: C.white, letterSpacing: 1.5 },
-  navActions: { flexDirection: "row", gap: 10, alignItems: "center" },
+  navLogoText: { fontWeight: "900", fontSize: isCompactMobile ? 16 : 18, color: C.white, letterSpacing: 1.2 },
+  navActions: { flexDirection: "row", gap: isCompactMobile ? 6 : 8, alignItems: "center", flexShrink: 0 },
   navBtnGhost: {
     borderWidth: 1, borderColor: C.glass,
-    borderRadius: 30, paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: 30, paddingHorizontal: isCompactMobile ? 10 : 14, paddingVertical: isCompactMobile ? 7 : 8,
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
-  navBtnGhostText: { color: C.white, fontSize: 13, fontWeight: "600" },
+  navBtnGhostText: { color: C.white, fontSize: isCompactMobile ? 12 : 13, fontWeight: "700" },
   navBtnPrimary: {
     backgroundColor: C.crimson,
-    borderRadius: 30, paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: 30, paddingHorizontal: isCompactMobile ? 12 : 16, paddingVertical: isCompactMobile ? 8 : 9,
+    shadowColor: C.crimson,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
-  navBtnPrimaryText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  navBtnPrimaryText: { color: "#fff", fontSize: isCompactMobile ? 12 : 13, fontWeight: "800" },
 
   hero: {
     minHeight: H * 0.88,
