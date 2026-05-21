@@ -1,6 +1,7 @@
 //March 3, 2026
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   View,
   Text,
@@ -85,6 +86,83 @@ const OngoingCard = React.memo(function OngoingCard({ item, onPress, index, widt
           <View style={styles.ongoingBadge}>
             <Ionicons name="play-circle" size={10} color={C.white} />
             <Text style={styles.ongoingBadgeText}>{epLabel}</Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={C.dim} style={{ marginRight: 12 }} />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+// ─── SCHEDULE HOME CARD (Horizontal) ──────────────────────────────────────────
+const ScheduleHomeCard = React.memo(function ScheduleHomeCard({ item, onPress, index, width }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const slideX = useRef(new Animated.Value(16)).current;
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 40, useNativeDriver: true }),
+      Animated.spring(slideX, { toValue: 0, delay: index * 40, tension: 100, friction: 10, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const onPressIn = useCallback(() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start(), []);
+  const onPressOut = useCallback(() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start(), []);
+
+  const imgUrl = item.image || "https://placehold.co/100x140/111115/DC143C?text=N";
+  
+  let timeStr = "";
+  if (item.time) {
+    try {
+      timeStr = new Date(item.time.replace(/-/g, "/")).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      timeStr = item.time;
+    }
+  }
+
+  const isReleased = item.status?.toLowerCase() === "released";
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateX: slideX }, { scale }], width: width, marginBottom: 12 }}>
+      <TouchableOpacity
+        style={styles.ongoingCard}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        onPress={() => onPress(item)}
+        activeOpacity={1}
+      >
+        <Image source={{ uri: imgUrl }} style={styles.ongoingImage} contentFit="cover" transition={300} />
+        <View style={styles.ongoingInfo}>
+          <Text style={styles.ongoingTitle} numberOfLines={2}>{item.title}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+            {timeStr ? (
+              <View style={[styles.ongoingBadge, { backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }]}>
+                <Ionicons name="time-outline" size={10} color={C.dim} />
+                <Text style={[styles.ongoingBadgeText, { color: C.dim }]}>{timeStr}</Text>
+              </View>
+            ) : null}
+            {item.episode ? (
+              <View style={[styles.ongoingBadge, { backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }]}>
+                <Ionicons name="film-outline" size={10} color={C.dim} />
+                <Text style={[styles.ongoingBadgeText, { color: C.dim }]}>
+                  {item.episode.replace(/episode\s*/i, 'Ep ')}
+                </Text>
+              </View>
+            ) : null}
+            <View style={[
+              styles.ongoingBadge, 
+              { 
+                backgroundColor: isReleased ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
+                borderColor: isReleased ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)",
+                borderWidth: 1
+              }
+            ]}>
+              <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: isReleased ? "#10B981" : "#F59E0B", marginRight: 4 }} />
+              <Text style={[styles.ongoingBadgeText, { color: isReleased ? "#10B981" : "#F59E0B", fontWeight: "800" }]}>
+                {isReleased ? "Released" : "Upcoming"}
+              </Text>
+            </View>
           </View>
         </View>
         <Ionicons name="chevron-forward" size={16} color={C.dim} style={{ marginRight: 12 }} />
@@ -321,6 +399,7 @@ const shimStyles = StyleSheet.create({
 const _handledSessionIds = new Set();
 
 export default function HomeScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { user, refreshSession } = useAuth();
 
@@ -335,6 +414,7 @@ export default function HomeScreen({ navigation }) {
   const [continueWatching, setContinueWatching] = useState([]);
   const [recent, setRecent] = useState([]);
   const [ongoing, setOngoing] = useState([]);
+  const [schedule, setSchedule] = useState([]);
   const [trending, setTrending] = useState([]);
   const [spotlight, setSpotlight] = useState([]);
   const [genres, setGenres] = useState([]);
@@ -420,7 +500,11 @@ export default function HomeScreen({ navigation }) {
     [anime, recent]
   );
 
-  const navbarHeight = scrollY.interpolate({ inputRange: [0, 120], outputRange: [88, 68], extrapolate: "clamp" });
+  const navbarHeight = scrollY.interpolate({
+    inputRange: [0, 120],
+    outputRange: [88 + insets.top, 68 + insets.top],
+    extrapolate: "clamp"
+  });
 
   const toggleDropdown = useCallback((show) => {
     Animated.spring(dropdownAnim, {
@@ -527,16 +611,18 @@ export default function HomeScreen({ navigation }) {
   const fetchRecentEpisodes = useCallback(async () => {
     try {
       setError(null);
-      const [recentRes, popularRes, spotlightRes, ongoingRes] = await Promise.all([
+      const [recentRes, popularRes, spotlightRes, ongoingRes, scheduleRes] = await Promise.all([
         cachedGet("/api/anime/recent?page=1", 60_000).catch(() => null),
         cachedGet("/api/anime/popular?page=1", 3600_000).catch(() => null),
         cachedGet("/api/anime/spotlight", 60_000).catch(() => null),
-        cachedGet("/api/anime/ongoing?page=1", 3600_000).catch(() => null)
+        cachedGet("/api/anime/ongoing?page=1", 3600_000).catch(() => null),
+        cachedGet("/api/anime/schedule", 3600_000).catch(() => null)
       ]);
 
       if (recentRes?.data?.success && recentRes.data.episodes) setRecent(recentRes.data.episodes);
       if (ongoingRes?.data?.success && ongoingRes.data.series) setOngoing(ongoingRes.data.series);
       if (popularRes?.data?.success && popularRes.data.results) setTrending(popularRes.data.results);
+      if (scheduleRes?.data?.success && scheduleRes.data.results) setSchedule(scheduleRes.data.results);
       if (spotlightRes?.data?.success && spotlightRes.data.results) {
         console.log("[HomeScreen] Spotlight data count:", spotlightRes.data.results.length);
         setSpotlight(spotlightRes.data.results);
@@ -588,7 +674,7 @@ export default function HomeScreen({ navigation }) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     // 🕵️‍♂️ Clear cache for all main sections to force fresh fetch
-    ["/api/anime/recent?page=1", "/api/anime/popular?page=1", "/api/anime/spotlight", "/api/anime/ongoing?page=1"].forEach(k => delete _cache[k]);
+    ["/api/anime/recent?page=1", "/api/anime/popular?page=1", "/api/anime/spotlight", "/api/anime/ongoing?page=1", "/api/anime/schedule"].forEach(k => delete _cache[k]);
     
     await Promise.all([
       fetchRecentEpisodes(), 
@@ -755,7 +841,7 @@ export default function HomeScreen({ navigation }) {
       <Animated.View style={[styles.navbar, { height: navbarHeight }]}>
         <BlurView intensity={85} tint="dark" style={StyleSheet.absoluteFill} />
         <View style={styles.navbarLine} />
-        <View style={styles.navContent}>
+        <View style={[styles.navContent, { paddingTop: insets.top }]}>
           <Animated.View style={{ transform: [{ scale: logoPulse }] }}>
             <View style={styles.logoRow}>
               <Text style={styles.logo}>
@@ -932,7 +1018,7 @@ export default function HomeScreen({ navigation }) {
 
         {/* ── MOBILE MENU DROPDOWN ── */}
         {width < 768 && mobileMenuOpen && (
-          <View style={styles.mobileMenuDropdown}>
+          <View style={[styles.mobileMenuDropdown, { top: 86 + insets.top }]}>
             <View style={styles.searchContainer}>
               <Animated.View style={[
                 styles.searchWrapper,
@@ -991,6 +1077,14 @@ export default function HomeScreen({ navigation }) {
 
             <View style={styles.mobileNavRow}>
               <TouchableOpacity
+                onPress={() => { setMobileMenuOpen(false); navigation.navigate("Schedule"); }}
+                style={styles.mobileNavBtn}
+              >
+                <Ionicons name="calendar-outline" size={20} color={C.white} />
+                <Text style={styles.mobileNavText}>Schedule</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 onPress={() => { setMobileMenuOpen(false); navigation.navigate("Notifications"); }}
                 style={styles.mobileNavBtn}
               >
@@ -1018,7 +1112,11 @@ export default function HomeScreen({ navigation }) {
       {/* ── SCROLL CONTENT ── */}
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 100, paddingBottom: 0, flexGrow: 1 }}
+        contentContainerStyle={{
+          paddingTop: 100 + insets.top,
+          paddingBottom: 24 + insets.bottom,
+          flexGrow: 1
+        }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: false }
@@ -1303,18 +1401,56 @@ export default function HomeScreen({ navigation }) {
                 gridGap={gridGap}
               />
             )}
-            {ongoing.length > 0 && (
-              <Section
-                title="Ongoing Series"
-                data={ongoing.slice(0, 10)} // Show top 10 ongoing
-                cardWidth={gridCardWidth}
-                cardHeight={gridCardHeight}
-                onItemPress={navigateToDetails}
-                variant="ongoing"
-                isGrid={true}
-                gridColumns={gridColumns}
-                gridGap={gridGap}
-              />
+            {/* Split Layout: Ongoing (Left) vs. Today's Schedule (Right) */}
+            {(ongoing.length > 0 || schedule.length > 0) && (
+              <View style={[
+                styles.splitLayoutContainer,
+                { flexDirection: width >= 992 ? "row" : "column", paddingHorizontal: 16, gap: 24, marginBottom: 20 }
+              ]}>
+                
+                {/* Left Column: Ongoing Series */}
+                {ongoing.length > 0 && (
+                  <View style={{ flex: width >= 992 ? 1 : undefined }}>
+                    <View style={styles.sectionHeaderSplit}>
+                      <View style={styles.sectionAccent} />
+                      <Text style={styles.sectionTitleSplit}>Ongoing Series</Text>
+                    </View>
+                    <View style={styles.splitListContainer}>
+                      {ongoing.slice(0, 6).map((item, index) => (
+                        <OngoingCard
+                          key={`ongoing-${item.slug || index}`}
+                          item={item}
+                          onPress={navigateToDetails}
+                          index={index}
+                          width="100%"
+                        />
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Right Column: Release Schedule */}
+                {schedule.length > 0 && (
+                  <View style={{ flex: width >= 992 ? 1 : undefined }}>
+                    <View style={styles.sectionHeaderSplit}>
+                      <View style={[styles.sectionAccent, { backgroundColor: "#F59E0B" }]} />
+                      <Text style={styles.sectionTitleSplit}>Today's Schedule</Text>
+                    </View>
+                    <View style={styles.splitListContainer}>
+                      {schedule.slice(0, 6).map((item, index) => (
+                        <ScheduleHomeCard
+                          key={`sched-${item.id || index}`}
+                          item={item}
+                          onPress={(it) => navigation.navigate("Details", { id: it.slug || it.id, title: it.title })}
+                          index={index}
+                          width="100%"
+                        />
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+              </View>
             )}
             {trending.length > 0 && (
               <Section
@@ -2020,5 +2156,40 @@ const styles = StyleSheet.create({
   pageNumberBtnActive: { backgroundColor: C.crimson, borderColor: C.crimson },
   pageNumberText: { color: C.white, fontSize: 13, fontWeight: "600" },
   pageNumberTextActive: { color: C.white, fontWeight: "800" },
+  
+  splitLayoutContainer: {
+    marginVertical: 10,
+  },
+  splitListContainer: {
+    flexDirection: "column",
+    gap: 0,
+    marginTop: 14,
+  },
+  sectionHeaderSplit: {
+    flexDirection: "row", 
+    alignItems: "center",
+    marginLeft: 2,
+    marginBottom: 6, 
+    gap: 10,
+  },
+  sectionTitleSplit: { 
+    color: C.white, 
+    fontSize: 18, 
+    fontWeight: "800", 
+    letterSpacing: -0.3,
+    flex: 1,
+  },
+  viewAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  viewAllText: {
+    color: C.dim,
+    fontSize: 12,
+    fontWeight: "700",
+  },
 
 });

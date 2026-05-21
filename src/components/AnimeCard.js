@@ -257,6 +257,29 @@ const AnimeCard = React.memo(function AnimeCard({
               <Text style={styles.cardCategoryText}>{categoryLabel}</Text>
             </View>
 
+            {/* Status Sash (Top-Left Diagonal) */}
+            {status && (
+              <View style={[
+                styles.cardSash,
+                {
+                  backgroundColor: 
+                    (status.toLowerCase().includes('complete') || status.toLowerCase().includes('finished'))
+                      ? '#10B981' // Emerald Green for Completed
+                      : (status.toLowerCase().includes('upcoming') || status.toLowerCase().includes('not yet'))
+                        ? '#F59E0B' // Amber for Upcoming
+                        : '#DC143C' // Crimson Red for Ongoing
+                }
+              ]}>
+                <Text style={styles.cardSashText}>
+                  {status.toLowerCase().includes('complete') || status.toLowerCase().includes('finished')
+                    ? 'COMPLETED'
+                    : status.toLowerCase().includes('upcoming') || status.toLowerCase().includes('not yet')
+                      ? 'UPCOMING'
+                      : 'ONGOING'}
+                </Text>
+              </View>
+            )}
+
             {/* Episode badge (Bottom-Left) */}
             {epLabel && (
               <View style={styles.cardEpisodeBadge}>
@@ -265,9 +288,11 @@ const AnimeCard = React.memo(function AnimeCard({
             )}
 
             {/* Type badge (Bottom-Right) */}
-            <View style={styles.cardTypeBadge}>
-              <Text style={styles.cardTypeText}>{typeLabel}</Text>
-            </View>
+            {typeLabel && typeLabel.toLowerCase() !== "sub" && (
+              <View style={styles.cardTypeBadge}>
+                <Text style={styles.cardTypeText}>{typeLabel}</Text>
+              </View>
+            )}
 
             {/* Progress Bar (Bottom) */}
             {progressPercent > 0 && (
@@ -339,6 +364,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4,
     borderRadius: 8, borderWidth: 1, borderColor: "rgba(255,255,255,0.2)",
     zIndex: 10,
+  },
+  cardSash: {
+    position: "absolute",
+    top: 6,
+    left: -25,
+    width: 85,
+    transform: [{ rotate: "-45deg" }],
+    zIndex: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 2,
+    boxShadow: "0 2px 4px rgba(0,0,0,0.25)"
+  },
+  cardSashText: {
+    color: "#fff",
+    fontSize: 7,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textAlign: "center",
   },
   cardCategoryText: { color: C.white, fontSize: 9, fontWeight: "800", textTransform: "uppercase" },
 

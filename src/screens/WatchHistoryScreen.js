@@ -13,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
@@ -43,6 +44,7 @@ const HistoryItem = React.memo(({ item, onPress }) => {
 });
 
 export default function WatchHistoryScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +95,7 @@ export default function WatchHistoryScreen({ navigation }) {
   };
 
   const renderHeader = () => (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
       <View style={styles.headerTop}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={C.white} />
@@ -133,7 +135,7 @@ export default function WatchHistoryScreen({ navigation }) {
         <FlatList
           data={history}
           keyExtractor={(item, index) => item._id || index.toString()}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
           renderItem={({ item }) => <HistoryItem item={item} onPress={handlePress} />}
           refreshing={refreshing}
           onRefresh={() => { setRefreshing(true); fetchHistory(); }}

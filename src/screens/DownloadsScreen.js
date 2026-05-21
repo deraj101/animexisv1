@@ -12,10 +12,12 @@ import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DownloadService from "../services/DownloadService";
 import { C } from "../theme";
 
 export default function DownloadsScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [downloads, setDownloads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +113,7 @@ export default function DownloadsScreen() {
 
   return (
     <View style={styles.container}>
-      <BlurView intensity={80} tint="dark" style={styles.header}>
+      <BlurView intensity={80} tint="dark" style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
@@ -122,7 +124,7 @@ export default function DownloadsScreen() {
         data={downloads}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
         ListEmptyComponent={
           !loading && (
             <View style={styles.empty}>

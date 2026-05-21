@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BlurView } from 'expo-blur';
 import { C } from '../theme';
 import * as NotificationApi from '../services/notificationApi';
@@ -53,6 +54,7 @@ const NotificationItem = ({ item, onPress }) => {
 };
 
 export default function NotificationsScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -133,7 +135,7 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <BlurView intensity={80} tint="dark" style={styles.header}>
+      <BlurView intensity={80} tint="dark" style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerContent}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={C.white} />
@@ -152,7 +154,7 @@ export default function NotificationsScreen({ navigation }) {
           data={notifications}
           keyExtractor={item => item._id}
           renderItem={({ item }) => <NotificationItem item={item} onPress={handleNotificationPress} />}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.crimson} />}
           ListEmptyComponent={

@@ -13,6 +13,7 @@ import {
   Modal,
 } from "react-native";
 import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
@@ -232,6 +233,7 @@ const shimStyles = StyleSheet.create({
 
 // ─── RESPONSIVE POSTER SIZING ───────────────────────────────────────────────────────────
 export default function DetailsScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const { id, title: initialTitle } = route.params;
   const { width } = useWindowDimensions();
   const { user } = useAuth();
@@ -682,7 +684,7 @@ export default function DetailsScreen({ route, navigation }) {
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
           style={styles.stickyAccentLine}
         />
-        <View style={styles.stickyHeaderContent}>
+        <View style={[styles.stickyHeaderContent, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={styles.stickyBackBtn}
@@ -706,7 +708,7 @@ export default function DetailsScreen({ route, navigation }) {
       <Animated.ScrollView
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 0 }]}
+        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 40 + insets.bottom }]}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true }
@@ -731,7 +733,7 @@ export default function DetailsScreen({ route, navigation }) {
             style={StyleSheet.absoluteFill}
           />
 
-          <View style={styles.backWrapper}>
+          <View style={[styles.backWrapper, { top: insets.top + 10 }]}>
             <BlurView intensity={50} tint="dark" style={styles.blurButton}>
               <TouchableOpacity onPress={() => navigation.goBack()}>
                 <Ionicons name="arrow-back" size={22} color="white" />
@@ -740,7 +742,7 @@ export default function DetailsScreen({ route, navigation }) {
           </View>
 
           {anime.score && (
-            <View style={styles.scoreBadge}>
+            <View style={[styles.scoreBadge, { top: insets.top + 10 }]}>
               <Ionicons name="star" size={12} color="#FFD700" />
               <Text style={styles.scoreText}>{anime.score}%</Text>
             </View>
@@ -1325,36 +1327,81 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  episodesGrid: { gap: 12 },
-  episodeCardWrap: { flex: 1, marginHorizontal: 2, marginVertical: 4 },
+  episodesGrid: { gap: 14 },
+  episodeCardWrap: { flex: 1, marginHorizontal: 2, marginVertical: 6 },
   episodeCard: {
     flexDirection: "row",
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16,
-    alignItems: "center", gap: 16, overflow: "hidden",
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    gap: 16,
+    minHeight: 72,
+    overflow: "hidden",
   },
-  episodeCardActive: { borderColor: C.crimson, backgroundColor: "rgba(220,20,60,0.12)" },
+  episodeCardActive: {
+    borderColor: C.crimson,
+    backgroundColor: "rgba(220,20,60,0.09)",
+  },
   episodeCardGlow: {
-    position: "absolute", top: 0, bottom: 0, left: 0,
-    width: 4, backgroundColor: C.crimson,
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 4,
+    backgroundColor: C.crimson,
   },
   episodeLeft: {
-    width: 32, height: 32, borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    justifyContent: "center", alignItems: "center",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
-  episodeNumber: { color: C.dim, fontSize: 13, fontWeight: "800" },
-  episodeNumberActive: { color: C.crimson },
-  episodeMain: { flex: 1 },
-  episodeTitle: { color: C.white, fontSize: 13, fontWeight: "600", lineHeight: 18, opacity: 0.8 },
-  episodeTitleActive: { opacity: 1 },
+  episodeNumber: {
+    color: C.dim,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  episodeNumberActive: {
+    color: C.crimson,
+  },
+  episodeMain: {
+    flex: 1,
+  },
+  episodeTitle: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
+    opacity: 0.8,
+    letterSpacing: -0.1,
+  },
+  episodeTitleActive: {
+    color: C.white,
+    opacity: 1,
+  },
   episodePlayIcon: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    justifyContent: "center", alignItems: "center",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
   },
-  episodePlayIconActive: { backgroundColor: C.crimson },
+  episodePlayIconActive: {
+    backgroundColor: C.crimson,
+    borderColor: C.crimson,
+  },
 
   // Episode progress bar
   episodeProgressBarBg: {
@@ -1362,14 +1409,14 @@ const styles = StyleSheet.create({
     bottom: 0, left: 0, right: 0,
     height: 3,
     backgroundColor: "rgba(255,255,255,0.06)",
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
     overflow: "hidden",
   },
   episodeProgressBarFill: {
     height: 3,
     backgroundColor: C.crimson,
-    borderBottomLeftRadius: 12,
+    borderBottomLeftRadius: 16,
   },
 
   rangeSelector: { paddingBottom: 16, gap: 10 },

@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { useAuth } from "../context/AuthContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { C } from "../theme";
 import API from "../services/api";
 import { SkeletonList } from "../components/SkeletonGrid";
@@ -52,6 +53,7 @@ const WatchlistCard = React.memo(({ item, index, onPress }) => {
 });
 
 export default function WatchlistScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +96,7 @@ export default function WatchlistScreen({ navigation }) {
   };
 
   const renderHeader = () => (
-    <BlurView intensity={80} tint="dark" style={styles.header}>
+    <BlurView intensity={80} tint="dark" style={[styles.header, { paddingTop: insets.top + 8 }]}>
       <View style={styles.headerTop}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={C.white} />
@@ -148,8 +150,8 @@ export default function WatchlistScreen({ navigation }) {
         <FlatList
           data={filteredList}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={() => <View style={{ height: 180 }} />}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
+          ListHeaderComponent={() => <View style={{ height: 160 + insets.top }} />}
           renderItem={({ item, index }) => <WatchlistCard item={item} index={index} onPress={handlePress} />}
           refreshing={refreshing}
           onRefresh={() => { setRefreshing(true); fetchWatchlist(); }}

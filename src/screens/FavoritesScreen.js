@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { useAuth } from "../context/AuthContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { C } from "../theme";
 import * as Stats from "../services/Userstats";
 import AnimeCard from "../components/AnimeCard";
@@ -27,6 +28,7 @@ const { width } = Dimensions.get("window");
 
 
 export default function FavoritesScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [favorites, setFavorites] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -95,7 +97,7 @@ export default function FavoritesScreen({ navigation }) {
   };
 
   const renderHeader = () => (
-    <BlurView intensity={80} tint="dark" style={styles.header}>
+    <BlurView intensity={80} tint="dark" style={[styles.header, { paddingTop: insets.top + 8 }]}>
       <View style={styles.headerTop}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={C.white} />
@@ -152,9 +154,9 @@ export default function FavoritesScreen({ navigation }) {
           keyExtractor={(item) => item.id}
           key={gridColumns}
           numColumns={gridColumns}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 24 }]}
           columnWrapperStyle={{ gap: gridGap }}
-          ListHeaderComponent={() => <View style={{ height: 140 }} />}
+          ListHeaderComponent={() => <View style={{ height: 120 + insets.top }} />}
 
           renderItem={({ item, index }) => (
             <View style={{ position: 'relative', marginBottom: gridGap }}>

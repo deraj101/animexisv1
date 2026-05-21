@@ -5,6 +5,8 @@ import {
   StyleSheet,
   Text,
   Dimensions,
+  useWindowDimensions,
+  Image,
   Platform,
   Animated,
   ScrollView,
@@ -12,6 +14,7 @@ import {
   Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Video } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -46,6 +49,7 @@ const C = {
   primary: "#FFFFFF",
   primaryDim: "rgba(255,255,255,0.07)",
   primaryBorder: "rgba(255,255,255,0.18)",
+  crimson: "#e11d48",
 };
 
 // ─── AD CONFIG ────────────────────────────────────────────────────────────────
@@ -307,14 +311,28 @@ function PlayerControls({
   );
 }
 
-const { width } = Dimensions.get("window");
-const MODAL_W = Math.min(width - 24, 900);
-const PLAYER_H = Math.round(MODAL_W * (9 / 16));
-
 // ─── PLAYER SCREEN ────────────────────────────────────────────────────────────
 export default function PlayerScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const { video, title, animeTitle, episodeNumber, episodeTitle, episodeData, animeId, animeImage, isOffline } = route.params;
   const { user } = useAuth();
+  
+  const { width, height } = useWindowDimensions();
+  const isWidescreen = width > 990;
+
+  // Dynamic responsive player dimensions
+  const playerWidth = isWidescreen ? Math.round(width * 0.69) : width;
+  const playerHeight = Math.round(playerWidth * (9 / 16));
+  const maxPlayerHeight = height * 0.72;
+  const finalPlayerHeight = Math.min(playerHeight, maxPlayerHeight);
+
+  const [currentEpisodeUrl, setCurrentEpisodeUrl] = useState(video);
+  const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState(episodeNumber);
+  const [currentEpisodeData, setCurrentEpisodeData] = useState(episodeData);
+  const [episodes, setEpisodes] = useState([]);
+  const [animeDetails, setAnimeDetails] = useState(null);
+  const [activeTab, setActiveTab] = useState("episodes"); // "episodes" | "comments"
+  const [showEpisodesModal, setShowEpisodesModal] = useState(false);
 
   const [playerLoading, setPlayerLoading] = useState(true);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -379,14 +397,14 @@ export default function PlayerScreen({ route, navigation }) {
           animeId: animeId,
           title: animeTitle || "Unknown Anime",
           image: animeImage || "",
-          episodeUrl: video,
-          episodeNumber: String(episodeNumber || "1"),
+          episodeUrl: currentEpisodeUrl,
+          episodeNumber: String(currentEpisodeNumber || "1"),
           progress: 0,
           duration: 0,
         }).catch(() => { });
       }
     }
-  }, [showAd, user?.email, animeId]);
+  }, [showAd, user?.email, animeId, currentEpisodeUrl, currentEpisodeNumber]);
 
   useEffect(() => {
     return () => {
@@ -406,14 +424,14 @@ export default function PlayerScreen({ route, navigation }) {
           animeId: animeId,
           title: animeTitle || "Unknown Anime",
           image: animeImage || "",
-          episodeUrl: video,
-          episodeNumber: String(episodeNumber || "1"),
+          episodeUrl: currentEpisodeUrl,
+          episodeNumber: String(currentEpisodeNumber || "1"),
           progress: Math.round(position),
           duration: Math.round(duration),
         }).catch(() => { });
       }
     };
-  }, []);
+  }, [currentEpisodeUrl, currentEpisodeNumber]);
 
   useEffect(() => {
     Animated.parallel([
@@ -432,7 +450,7 @@ export default function PlayerScreen({ route, navigation }) {
   const fetchCommentCount = useCallback(async () => {
     try {
       const res = await API.get(`/api/comments/count/${animeId}`, {
-        params: { episodeNum: episodeNumber }
+        params: { episodeNum: currentEpisodeNumber }
       });
       if (res.data.success) {
         setCommentCount(res.data.count);
@@ -440,7 +458,7 @@ export default function PlayerScreen({ route, navigation }) {
     } catch (err) {
       console.error("Failed to fetch comment count:", err);
     }
-  }, [animeId, episodeNumber]);
+  }, [animeId, currentEpisodeNumber]);
 
   useEffect(() => {
     fetchCommentCount();
@@ -485,29 +503,29 @@ export default function PlayerScreen({ route, navigation }) {
     return rawUrl;
   };
 
-  const pickAndLoadSource = () => {
+  const pickAndLoadSource = (epData = currentEpisodeData, epUrl = currentEpisodeUrl) => {
     console.log("[Player] 🔍 Picking source. Platform:", Platform.OS);
     if (isOffline) {
-      console.log("[Player] 📦 Offline mode. Using local file:", video);
+      console.log("[Player] 📦 Offline mode. Using local file:", epUrl);
       setUseWebView(false);
-      setVideoUrl(video);
+      setVideoUrl(epUrl);
       return;
     }
 
-    const videoSrc = episodeData?.videoSources?.find(s => isVideoFile(s.url || s));
-    const embedSrc = episodeData?.videoSources?.find(s => isEmbedPage(s.url || s));
+    const videoSrc = epData?.videoSources?.find(s => isVideoFile(s.url || s));
+    const embedSrc = epData?.videoSources?.find(s => isEmbedPage(s.url || s));
 
     console.log("[Player] 🔎 Discovery:", {
       hasVideo: !!videoSrc,
       hasEmbed: !!embedSrc,
-      hasIframe: !!episodeData?.iframe,
+      hasIframe: !!epData?.iframe,
       videoUrl: videoSrc?.url || videoSrc
     });
 
     // On Web, prioritize iframes/embeds due to strict CORS and HLS proxying limitations.
     if (Platform.OS === "web") {
-      if (episodeData?.iframe || embedSrc) {
-        const url = episodeData.iframe || embedSrc?.url || embedSrc;
+      if (epData?.iframe || embedSrc) {
+        const url = epData.iframe || embedSrc?.url || embedSrc;
         console.log("[Player] 🌐 Web: Using WebView for embed:", url);
         setUseWebView(true);
         setWebViewUrl(url);
@@ -529,8 +547,8 @@ export default function PlayerScreen({ route, navigation }) {
         setVideoUrl(url);
         return;
       }
-      if (embedSrc || episodeData?.iframe) {
-        const url = embedSrc?.url || embedSrc || episodeData.iframe;
+      if (embedSrc || epData?.iframe) {
+        const url = embedSrc?.url || embedSrc || epData.iframe;
         console.log("[Player] 📱 Mobile: Using WebView for embed:", url);
         setUseWebView(true);
         setWebViewUrl(url);
@@ -538,14 +556,14 @@ export default function PlayerScreen({ route, navigation }) {
       }
     }
 
-    if (video) {
-      console.log("[Player] ⚠️ No episodeData sources. Falling back to 'video' param:", video);
-      if (isVideoFile(video)) {
+    if (epUrl) {
+      console.log("[Player] ⚠️ No sources. Falling back to url:", epUrl);
+      if (isVideoFile(epUrl)) {
         setUseWebView(false);
-        setVideoUrl(buildStreamUrl(video));
+        setVideoUrl(buildStreamUrl(epUrl));
       } else {
         setUseWebView(true);
-        setWebViewUrl(video);
+        setWebViewUrl(epUrl);
       }
       return;
     }
@@ -557,22 +575,25 @@ export default function PlayerScreen({ route, navigation }) {
   const handleVideoError = useCallback((e) => {
     console.log("❌ [Player] Video Error:", e?.error || e?.nativeEvent || e);
     setPlayerLoading(false);
-    if (Platform.OS !== "web" && videoUrl) {
-      console.log("[Player] Falling back to WebView for URL:", videoUrl);
+    
+    // If native playback fails, fall back to the actual HTML iframe player in WebView
+    const fallbackUrl = currentEpisodeData?.iframe || currentEpisodeUrl;
+    if (Platform.OS !== "web" && fallbackUrl) {
+      console.log("[Player] Falling back to WebView for embed iframe:", fallbackUrl);
       setUseWebView(true);
-      setWebViewUrl(videoUrl);
+      setWebViewUrl(fallbackUrl);
       setVideoUrl(null);
       setPlayerLoading(true);
       return;
     }
     setError("Playback failed. Try opening in browser.");
-  }, [videoUrl]);
+  }, [currentEpisodeData, currentEpisodeUrl]);
 
   const openInBrowser = useCallback(() => {
-    const url = webViewUrl || videoUrl || video;
+    const url = webViewUrl || videoUrl || currentEpisodeUrl;
     if (!url) return;
     Platform.OS === "web" ? window.open(url, "_blank") : WebBrowser.openBrowserAsync(url);
-  }, [webViewUrl, videoUrl, video]);
+  }, [webViewUrl, videoUrl, currentEpisodeUrl]);
 
   const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
@@ -588,11 +609,186 @@ export default function PlayerScreen({ route, navigation }) {
     goBack();
   }, [user, animeId, goBack]);
 
+  const onReportVideo = useCallback(() => {
+    Alert.alert(
+      "Report Broken Video",
+      "Is this video not playing or buffering endlessly? We can try to fix it.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Report", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await API.post("/api/anime/report-video", {
+                animeId,
+                episodeNum: currentEpisodeNumber
+              });
+              if (res.data?.success) {
+                Alert.alert("Reported", "Thanks! We've cleared the cache. Please try reloading the page in a moment.");
+              } else {
+                Alert.alert("Error", "Could not report video right now.");
+              }
+            } catch (err) {
+              Alert.alert("Error", "Failed to connect to server.");
+            }
+          }
+        }
+      ]
+    );
+  }, [animeId, currentEpisodeNumber]);
+
   const handleAdFinished = useCallback(() => setShowAd(false), []);
 
+  const [selectedSourceLabel, setSelectedSourceLabel] = useState("Auto");
+
+  const handleSourceSelect = (src) => {
+    setPlayerLoading(true);
+    setError(null);
+    if (src.isIframe) {
+      setSelectedSourceLabel(src.label);
+      setUseWebView(true);
+      setWebViewUrl(src.url);
+      setVideoUrl(null);
+    } else {
+      setSelectedSourceLabel(src.label);
+      if (isEmbedPage(src.url)) {
+        setUseWebView(true);
+        setWebViewUrl(src.url);
+        setVideoUrl(null);
+      } else {
+        setUseWebView(false);
+        setVideoUrl(buildStreamUrl(src.url));
+        setWebViewUrl(null);
+      }
+    }
+  };
+
+  const handleEpisodeSelect = async (ep) => {
+    try {
+      setShowEpisodesModal(false);
+      setPlayerLoading(true);
+      setError(null);
+      setVideoUrl(null);
+      setWebViewUrl(null);
+      setSelectedSourceLabel("Auto");
+      
+      const res = await API.get(`/api/anime/episode-info?url=${encodeURIComponent(ep.url)}`);
+      if (res.data?.success) {
+        setCurrentEpisodeUrl(ep.url);
+        setCurrentEpisodeNumber(ep.number);
+        setCurrentEpisodeData(res.data);
+        
+        // Reset playback tracker
+        playbackRef.current = { position: 0, duration: 0 };
+        wasFinishedRef.current = false;
+        
+        // Pick new sources
+        pickAndLoadSource(res.data, ep.url);
+        
+        // Sync watch history for this new episode immediately
+        if (user?.email && animeId) {
+          API.post("/api/anime/continue-watching", {
+            email: user.email,
+            animeId: animeId,
+            title: animeTitle || "Unknown Anime",
+            image: animeImage || "",
+            episodeUrl: ep.url,
+            episodeNumber: String(ep.number),
+            progress: 0,
+            duration: 0,
+          }).catch(() => { });
+        }
+      } else {
+        Alert.alert("Error", res.data?.error || "Failed to load episode info");
+        setPlayerLoading(false);
+      }
+    } catch (err) {
+      Alert.alert("Error", "Could not switch episode. Please try again.");
+      setPlayerLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (animeId && !isOffline) {
+      const fetchEpisodes = async () => {
+        try {
+          const res = await API.get(`/api/anime/details/${animeId}`);
+          if (res.data?.success) {
+            setAnimeDetails(res.data);
+            if (res.data.episodes) {
+              setEpisodes(res.data.episodes);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch episodes list:", err);
+        }
+      };
+      fetchEpisodes();
+    }
+  }, [animeId, isOffline]);
+
   const headerTitle = animeTitle
-    ? `${animeTitle}  ·  Ep ${episodeNumber}${episodeTitle ? `: ${episodeTitle}` : ""}`
+    ? `${animeTitle}  ·  Ep ${currentEpisodeNumber}`
     : title || "Now Playing";
+
+  const availableSources = [];
+  
+  if (currentEpisodeData?.videoSources) {
+    currentEpisodeData.videoSources.forEach((s, idx) => {
+      availableSources.push({
+        ...s,
+        label: s.quality || `Direct ${idx + 1}`,
+        isIframe: false,
+        url: s.url || s
+      });
+    });
+  }
+
+  if (currentEpisodeData?.servers && Array.isArray(currentEpisodeData.servers)) {
+    currentEpisodeData.servers.forEach((srv, idx) => {
+      if (!availableSources.some(s => s.url === srv.url)) {
+        availableSources.push({
+          url: srv.url,
+          label: srv.label || `Server ${idx + 1}`,
+          isIframe: true
+        });
+      }
+    });
+  }
+
+  if (currentEpisodeData?.iframe && !availableSources.some(s => s.url === currentEpisodeData.iframe)) {
+    availableSources.push({
+      url: currentEpisodeData.iframe,
+      label: "Main Stream",
+      isIframe: true
+    });
+  }
+
+  const renderSourceSelector = () => {
+    if (availableSources.length <= 1) return null;
+    return (
+      <View style={styles.sourceSelectorContainer}>
+        <Text style={styles.sourceSelectorLabel}>Server:</Text>
+        <View style={styles.sourceWrap}>
+          {availableSources.map((src, idx) => {
+            const isActive = selectedSourceLabel === src.label || (selectedSourceLabel === "Auto" && idx === 0);
+            return (
+              <TouchableOpacity
+                key={idx}
+                style={[styles.sourceBtn, isActive && styles.sourceBtnActive]}
+                onPress={() => handleSourceSelect(src)}
+              >
+                <Text style={[styles.sourceBtnText, isActive && styles.sourceBtnTextActive]}>
+                  {src.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
 
   // ── Player body ───────────────────────────────────────────────────────────────
   const renderPlayerBody = () => {
@@ -667,7 +863,8 @@ export default function PlayerScreen({ route, navigation }) {
                 headers: {
                   "Referer": videoUrl.includes("kwik.cx") 
                     ? "https://kwik.cx/" 
-                    : new URL(videoUrl).origin + "/"
+                    : "https://embtaku.com/",
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 }
               })
             }}
@@ -691,8 +888,8 @@ export default function PlayerScreen({ route, navigation }) {
                     animeId,
                     title: animeTitle || "Unknown Anime",
                     image: animeImage || "",
-                    episodeUrl: video,
-                    episodeNumber: String(episodeNumber || "1"),
+                    episodeUrl: currentEpisodeUrl,
+                    episodeNumber: String(currentEpisodeNumber || "1"),
                     progress: Math.round(posSec),
                     duration: Math.round(durSec),
                   }).catch(() => {});
@@ -738,164 +935,548 @@ export default function PlayerScreen({ route, navigation }) {
 
   // ── MAIN RENDER ──────────────────────────────────────────────────────────────
   return (
-    <View style={styles.screen}>
+    <Animated.View style={[styles.screen, { opacity: cardAnim }]}>
       <StatusBar hidden />
-      <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={goBack} />
 
-      <Animated.View style={[styles.card, { opacity: cardAnim, transform: [{ scale: cardScale }] }]}>
-        {/* ── Static header (always visible) ── */}
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle} numberOfLines={1}>{headerTitle}</Text>
-          <View style={styles.headerRight}>
-            <View style={styles.iconBtnWrap}>
-              <TouchableOpacity
-                onPress={() => setShowComments(true)}
-                style={styles.iconBtn}
-                accessibilityLabel="View Comments"
-                onMouseEnter={() => setHoveredBtn('comments')}
-                onMouseLeave={() => setHoveredBtn(null)}
-              >
-                <Ionicons name="chatbubble-outline" size={17} color={C.dim} />
-                {commentCount > 0 && (
-                  <View style={styles.countBadge}>
-                    <Text style={styles.countText}>{commentCount}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              {renderTooltip('comments', 'View Comments')}
-            </View>
-
-            <View style={styles.iconBtnWrap}>
-              <TouchableOpacity
-                onPress={onMarkFinished}
-                style={styles.iconBtn}
-                accessibilityLabel="Mark as Finished"
-                onMouseEnter={() => setHoveredBtn('finish')}
-                onMouseLeave={() => setHoveredBtn(null)}
-              >
-                <Ionicons name="checkmark-circle-outline" size={19} color={C.dim} />
-              </TouchableOpacity>
-              {renderTooltip('finish', 'Mark as Finished')}
-            </View>
-
-            <View style={styles.iconBtnWrap}>
-              <TouchableOpacity
-                onPress={openInBrowser}
-                style={styles.iconBtn}
-                accessibilityLabel="Open in Browser"
-                onMouseEnter={() => setHoveredBtn('browser')}
-                onMouseLeave={() => setHoveredBtn(null)}
-              >
-                <Ionicons name="open-outline" size={17} color={C.dim} />
-              </TouchableOpacity>
-              {renderTooltip('browser', 'Open in Browser')}
-            </View>
-
-            <View style={styles.iconBtnWrap}>
-              <TouchableOpacity
-                onPress={goBack}
-                style={styles.iconBtn}
-                accessibilityLabel="Close Player"
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                onMouseEnter={() => setHoveredBtn('close')}
-                onMouseLeave={() => setHoveredBtn(null)}
-              >
-                <Ionicons name="close" size={19} color={C.white} />
-              </TouchableOpacity>
-              {renderTooltip('close', 'Close Player')}
-            </View>
-          </View>
+      {/* ── Sleek Fullscreen Top Navigation Bar ── */}
+      <View style={[styles.fullscreenHeader, { paddingTop: insets.top + 10 }]}>
+        <TouchableOpacity onPress={goBack} style={styles.backButtonWrap} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name="chevron-back" size={24} color="#ffffff" />
+        </TouchableOpacity>
+        <View style={styles.headerInfoContainer}>
+          <Text style={styles.fullscreenHeaderTitle} numberOfLines={1}>
+            {animeTitle || title || "Now Playing"}
+          </Text>
+          <Text style={styles.fullscreenHeaderSubtitle}>
+            Episode {currentEpisodeNumber}
+          </Text>
         </View>
-
-        <View style={styles.cardBody}>
-          <View style={{ height: PLAYER_H }}>
-            {renderPlayerBody()}
-            {showAd && <AdOverlay onAdFinished={handleAdFinished} />}
+        
+        <View style={styles.headerRight}>
+          <View style={styles.iconBtnWrap}>
+            <TouchableOpacity
+              onPress={onReportVideo}
+              style={[styles.iconBtn, { borderColor: 'rgba(225,29,72,0.4)' }]}
+              accessibilityLabel="Report Broken Video"
+              onMouseEnter={() => setHoveredBtn('report')}
+              onMouseLeave={() => setHoveredBtn(null)}
+            >
+              <Ionicons name="warning-outline" size={17} color="#e11d48" />
+            </TouchableOpacity>
+            {renderTooltip('report', 'Report Broken Video')}
           </View>
-        </View>
-      </Animated.View>
 
-      {/* ── COMMENTS MODAL OVERLAY ── */}
-      <Modal
-        visible={showComments}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowComments(false)}
-      >
-        <View style={styles.commentsOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setShowComments(false)}
-          />
-          <View style={styles.commentsCard}>
-            <View style={styles.commentsHeader}>
-              <Text style={styles.commentsTitle}>Discussion</Text>
-              <TouchableOpacity onPress={() => setShowComments(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close" size={22} color={C.white} />
+          <View style={styles.iconBtnWrap}>
+            <TouchableOpacity
+              onPress={onMarkFinished}
+              style={styles.iconBtn}
+              accessibilityLabel="Mark as Finished"
+              onMouseEnter={() => setHoveredBtn('finish')}
+              onMouseLeave={() => setHoveredBtn(null)}
+            >
+              <Ionicons name="checkmark-circle-outline" size={19} color={C.dim} />
+            </TouchableOpacity>
+            {renderTooltip('finish', 'Mark as Finished')}
+          </View>
+
+
+        </View>
+      </View>
+
+      {/* ── Dynamic Layout Body ── */}
+      {isWidescreen ? (
+        /* ── WIDESCREEN CINEMATIC SIDE-BY-SIDE LAYOUT ── */
+        <View style={styles.widescreenContainer}>
+          {/* Left Column: Player + Metadata Info Card */}
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.widescreenLeftColumn}>
+            <Animated.View style={{ width: playerWidth, height: finalPlayerHeight, position: "relative", backgroundColor: "#000", borderRadius: 16, overflow: "hidden", transform: [{ scale: cardScale }] }}>
+              {renderPlayerBody()}
+              {showAd && <AdOverlay onAdFinished={handleAdFinished} />}
+            </Animated.View>
+            <View style={styles.metaCard}>
+              {renderSourceSelector()}
+            </View>
+          </ScrollView>
+
+          {/* Right Column: Dynamic Sidebar (Tabs for Episodes & Comments) */}
+          <View style={styles.widescreenRightColumn}>
+            <View style={styles.sidebarTabsHeader}>
+              <TouchableOpacity 
+                onPress={() => setActiveTab("episodes")}
+                style={[styles.sidebarTabBtn, activeTab === "episodes" && styles.sidebarTabBtnActive]}
+              >
+                <Text style={[styles.sidebarTabBtnText, activeTab === "episodes" && styles.sidebarTabBtnTextActive]}>
+                  Episodes ({episodes.length})
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                onPress={() => setActiveTab("comments")}
+                style={[styles.sidebarTabBtn, activeTab === "comments" && styles.sidebarTabBtnActive]}
+              >
+                <Text style={[styles.sidebarTabBtnText, activeTab === "comments" && styles.sidebarTabBtnTextActive]}>
+                  Discussion
+                </Text>
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-              <CommentSection
-                animeId={animeId}
-                episodeNum={episodeNumber}
-                onCommentAdded={fetchCommentCount}
-              />
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }} style={styles.sidebarContentScroll}>
+              {activeTab === "episodes" ? (
+                <View style={styles.episodeListContainer}>
+                  {episodes.map((ep) => {
+                    const isActive = String(ep.number) === String(currentEpisodeNumber);
+                    return (
+                      <TouchableOpacity
+                        key={ep.id || ep.number}
+                        onPress={() => handleEpisodeSelect(ep)}
+                        style={[
+                          styles.episodeItemRow,
+                          isActive && styles.episodeItemRowActive
+                        ]}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.episodeItemNumberContainer, isActive && styles.episodeItemNumberContainerActive]}>
+                          <Text style={[styles.episodeItemNumberText, isActive && styles.episodeItemActiveText]}>
+                            Ep {ep.number}
+                          </Text>
+                        </View>
+                        <Text style={[styles.episodeItemTitleText, isActive && styles.episodeItemActiveText]} numberOfLines={1}>
+                          {ep.title || `Episode ${ep.number}`}
+                        </Text>
+                        {isActive && (
+                          <Ionicons name="play" size={14} color="#000" style={styles.episodePlayIcon} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : (
+                <CommentSection
+                  animeId={animeId}
+                  episodeNum={currentEpisodeNumber}
+                  onCommentAdded={fetchCommentCount}
+                />
+              )}
             </ScrollView>
           </View>
         </View>
-      </Modal>
-    </View>
+      ) : (
+        /* ── MOBILE VERTICAL STACKED CINEMATIC LAYOUT ── */
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.mobileContainer}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        >
+          <Animated.View style={{ width: playerWidth, height: finalPlayerHeight, position: "relative", backgroundColor: "#000", transform: [{ scale: cardScale }] }}>
+            {renderPlayerBody()}
+            {showAd && <AdOverlay onAdFinished={handleAdFinished} />}
+          </Animated.View>
+
+          {/* Anime Info details block */}
+          <View style={styles.mobileMetaCard}>
+            {renderSourceSelector()}
+
+          </View>
+
+          {/* Dynamic tabs selector inside mobile page flow */}
+          <View style={styles.mobileTabsHeader}>
+            <TouchableOpacity 
+              onPress={() => setActiveTab("episodes")}
+              style={[styles.mobileTabBtn, activeTab === "episodes" && styles.mobileTabBtnActive]}
+            >
+              <Text style={[styles.mobileTabBtnText, activeTab === "episodes" && styles.mobileTabBtnTextActive]}>
+                Episodes ({episodes.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={() => setActiveTab("comments")}
+              style={[styles.mobileTabBtn, activeTab === "comments" && styles.mobileTabBtnActive]}
+            >
+              <Text style={[styles.mobileTabBtnText, activeTab === "comments" && styles.mobileTabBtnTextActive]}>
+                Comments ({commentCount})
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.mobileTabContentContainer}>
+            {activeTab === "episodes" ? (
+              <View style={styles.episodeListContainer}>
+                {episodes.map((ep) => {
+                  const isActive = String(ep.number) === String(currentEpisodeNumber);
+                  return (
+                    <TouchableOpacity
+                      key={ep.id || ep.number}
+                      onPress={() => handleEpisodeSelect(ep)}
+                      style={[
+                        styles.episodeItemRow,
+                        isActive && styles.episodeItemRowActive
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.episodeItemNumberContainer, isActive && styles.episodeItemNumberContainerActive]}>
+                        <Text style={[styles.episodeItemNumberText, isActive && styles.episodeItemActiveText]}>
+                          Ep {ep.number}
+                        </Text>
+                      </View>
+                      <Text style={[styles.episodeItemTitleText, isActive && styles.episodeItemActiveText]} numberOfLines={1}>
+                        {ep.title || `Episode ${ep.number}`}
+                      </Text>
+                      {isActive && (
+                        <Ionicons name="play" size={14} color="#000" style={styles.episodePlayIcon} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <CommentSection
+                animeId={animeId}
+                episodeNum={currentEpisodeNumber}
+                onCommentAdded={fetchCommentCount}
+              />
+            )}
+          </View>
+        </ScrollView>
+      )}
+    </Animated.View>
   );
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
+// ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.82)",
+    backgroundColor: "#080808",
+  },
+  
+  // ── Fullscreen Header ──
+  fullscreenHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: "#0d0d0d",
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    zIndex: 100,
+  },
+  backButtonWrap: {
+    marginRight: 16,
+    padding: 4,
+  },
+  headerInfoContainer: {
+    flex: 1,
+  },
+  fullscreenHeaderTitle: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  fullscreenHeaderSubtitle: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconBtnWrap: {
+    position: "relative",
+    alignItems: "center",
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
     justifyContent: "center",
     alignItems: "center",
   },
-  card: {
-    width: MODAL_W,
-    backgroundColor: C.surface,
-    borderRadius: 28,
+
+  // ── Widescreen layout ──
+  widescreenContainer: {
+    flex: 1,
+    flexDirection: "row",
+    padding: 20,
+    gap: 20,
+  },
+  widescreenLeftColumn: {
+    flex: 3,
+  },
+  widescreenRightColumn: {
+    width: 340,
+    backgroundColor: "#101010",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: "rgba(255,255,255,0.06)",
     overflow: "hidden",
-    zIndex: 10,
-    boxShadow: '0 16px 36px rgba(0,0,0,0.7)',
   },
-  cardHeader: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 18, paddingVertical: 13,
-    borderBottomWidth: 1, borderBottomColor: C.border,
-    zIndex: 100, // Ensure header (and tooltips) are above cardBody
-  },
-  cardTitle: { color: C.white, fontSize: 14, fontWeight: "600", flex: 1, marginRight: 10 },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  iconBtn: {
-    width: 32, height: 32, borderRadius: 9,
-    backgroundColor: C.surfaceHigh,
-    borderWidth: 1, borderColor: C.border,
-    justifyContent: "center", alignItems: "center",
-  },
-  cardBody: { backgroundColor: "#000", maxHeight: 650 },
 
-  playerArea: { flex: 1, backgroundColor: "#000", position: "relative" },
-  video: { flex: 1, backgroundColor: "#000" },
-  preparingBox: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12, backgroundColor: C.bg },
+  // ── Mobile layout ──
+  mobileContainer: {
+    flex: 1,
+  },
+  mobileMetaCard: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  mobileDetailsContainer: {
+    marginTop: 10,
+  },
+  mobileDetailsSynopsis: {
+    color: "rgba(255,255,255,0.65)",
+    fontSize: 13,
+    lineHeight: 18,
+  },
 
+  // ── Anime Info Card (Widescreen) ──
+  metaCard: {
+    backgroundColor: "#101010",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    padding: 20,
+    marginTop: 20,
+  },
+  sourceSelectorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  sourceSelectorLabel: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 13,
+    fontWeight: "600",
+    marginRight: 12,
+  },
+  sourceWrap: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  sourceBtn: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  sourceBtnActive: {
+    backgroundColor: "rgba(250,204,21,0.15)",
+    borderColor: "#facc15",
+  },
+  sourceBtnText: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  sourceBtnTextActive: {
+    color: "#facc15",
+  },
+  metaTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  metaAnimeTitle: {
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: "800",
+    flex: 1,
+    marginRight: 12,
+  },
+  metaEpisodeBadge: {
+    color: "#facc15",
+    fontSize: 14,
+    fontWeight: "700",
+    backgroundColor: "rgba(250,204,21,0.12)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  detailsContentContainer: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  detailsPoster: {
+    width: 110,
+    height: 160,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  detailsTextCol: {
+    flex: 1,
+    gap: 12,
+  },
+  detailsBadgeRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  statusBadge: {
+    backgroundColor: "rgba(16,185,129,0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgeText: {
+    color: "#10b981",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  typeBadge: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  typeBadgeText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  genresRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  genreBadge: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  genreBadgeText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  detailsSynopsis: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  detailsLoadingWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 30,
+    gap: 10,
+  },
+  detailsLoadingText: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 13,
+  },
+
+  // ── Widescreen Tabs Header ──
+  sidebarTabsHeader: {
+    flexDirection: "row",
+    backgroundColor: "#161616",
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  sidebarTabBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderBottomWidth: 2,
+    borderColor: "transparent",
+  },
+  sidebarTabBtnActive: {
+    borderColor: "#facc15",
+  },
+  sidebarTabBtnText: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  sidebarTabBtnTextActive: {
+    color: "#facc15",
+    fontWeight: "700",
+  },
+  sidebarContentScroll: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+
+  // ── Mobile Tabs Header ──
+  mobileTabsHeader: {
+    flexDirection: "row",
+    backgroundColor: "#101010",
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  mobileTabBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderBottomWidth: 2,
+    borderColor: "transparent",
+  },
+  mobileTabBtnActive: {
+    borderColor: "#facc15",
+  },
+  mobileTabBtnText: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  mobileTabBtnTextActive: {
+    color: "#facc15",
+    fontWeight: "700",
+  },
+  mobileTabContentContainer: {
+    padding: 16,
+  },
+
+  // ── Video Controls Overlay ──
+  playerArea: {
+    flex: 1,
+    backgroundColor: "#000",
+    position: "relative",
+  },
+  video: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  preparingBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#000",
+  },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: "center", alignItems: "center",
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: "rgba(11,12,16,0.88)",
-    zIndex: 5, gap: 12,
+    zIndex: 5,
+    gap: 12,
   },
-  loadingText: { color: C.dim, fontSize: 13 },
+  loadingText: {
+    color: "#888",
+    fontSize: 13,
+  },
 
-  // ── Controls overlay ──
+  // ── Video Action Controls ──
   controlsOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 20,
@@ -915,12 +1496,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  controlsTopRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  controlsTopRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   controlBtn: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: "rgba(0,0,0,0.45)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
-    justifyContent: "center", alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   controlBtnClose: {
     backgroundColor: "rgba(220,20,60,0.25)",
@@ -932,13 +1521,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   controlsCenterIcon: {
-    width: 54, height: 54, borderRadius: 27,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: "rgba(0,0,0,0.35)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.15)",
-    justifyContent: "center", alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
-  iconBtnWrap: { position: "relative", alignItems: "center" },
+  // ── Tooltips ──
   tooltip: {
     position: "absolute",
     top: 42,
@@ -946,89 +1539,127 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 8,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
-    zIndex: 999, // Extra safety
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    zIndex: 999,
     minWidth: 130,
     alignItems: "center",
   },
   tooltipArrow: {
     position: "absolute",
     top: -6,
-    width: 0, height: 0,
-    borderLeftWidth: 6, borderLeftColor: "transparent",
-    borderRightWidth: 6, borderRightColor: "transparent",
-    borderBottomWidth: 6, borderBottomColor: "rgba(32,32,32,0.95)",
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderLeftColor: "transparent",
+    borderRightWidth: 6,
+    borderRightColor: "transparent",
+    borderBottomWidth: 6,
+    borderBottomColor: "rgba(32,32,32,0.95)",
   },
-  tooltipText: { color: "#fff", fontSize: 11, fontWeight: "600", whiteSpace: "nowrap" },
+  tooltipText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+  },
 
+  // ── Errors ──
   errorBox: {
-    flex: 1, justifyContent: "center", alignItems: "center",
-    padding: 24, gap: 10, backgroundColor: C.bg,
-  },
-  errorIconWrap: {
-    width: 76, height: 76, borderRadius: 38,
-    backgroundColor: C.primaryDim,
-    borderWidth: 1, borderColor: C.primaryBorder,
-    justifyContent: "center", alignItems: "center", marginBottom: 4,
-  },
-  errorTitle: { color: C.white, fontSize: 17, fontWeight: "700" },
-  errorText: { color: C.dim, fontSize: 13, textAlign: "center", lineHeight: 19 },
-  browserBtn: { borderRadius: 30, overflow: "hidden", marginTop: 6 },
-  browserBtnInner: {
-    flexDirection: "row", alignItems: "center", gap: 7,
-    paddingHorizontal: 22, paddingVertical: 11,
-  },
-  browserBtnText: { color: "#000000", fontSize: 14, fontWeight: "700" },
-
-  // ── Comments Modal ──
-  commentsOverlay: {
     flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.5)"
-  },
-  commentsCard: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "80%",
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderColor: C.border,
-  },
-  commentsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderColor: C.border
-  },
-  commentsTitle: {
-    color: C.white,
-    fontSize: 18,
-    fontWeight: "700"
-  },
-  countBadge: {
-    position: "absolute",
-    top: -5,
-    right: -5,
-    backgroundColor: C.crimson,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 4,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: C.surface
+    padding: 24,
+    gap: 10,
+    backgroundColor: "#080808",
   },
-  countText: {
-    color: C.white,
-    fontSize: 9,
-    fontWeight: "800"
+  errorIconWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  errorTitle: {
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  errorText: {
+    color: "#888888",
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 19,
+  },
+  browserBtn: {
+    borderRadius: 30,
+    overflow: "hidden",
+    marginTop: 6,
+  },
+  browserBtnInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 22,
+    paddingVertical: 11,
+  },
+  browserBtnText: {
+    color: "#000000",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  // ── Episodes Row List ──
+  episodeListContainer: {
+    gap: 8,
+    marginTop: 6,
+  },
+  episodeItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    gap: 12,
+  },
+  episodeItemRowActive: {
+    backgroundColor: "#facc15",
+    borderColor: "#eab308",
+  },
+  episodeItemNumberContainer: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  episodeItemNumberContainerActive: {
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+  episodeItemNumberText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  episodeItemTitleText: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
+  },
+  episodeItemActiveText: {
+    color: "#000000",
+    fontWeight: "700",
+  },
+  episodePlayIcon: {
+    marginLeft: "auto",
   }
 });
 

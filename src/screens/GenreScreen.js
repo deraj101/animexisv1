@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
@@ -30,6 +31,7 @@ const getCardDimensions = (width) => {
 
 // ─── GENRE SCREEN ─────────────────────────────────────────────────────────────
 export default function GenreScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const { slug, title: genreTitle } = route.params;
   const { width } = useWindowDimensions();
 
@@ -139,7 +141,7 @@ export default function GenreScreen({ route, navigation }) {
             end={{ x: 1, y: 0 }}
             style={styles.headerAccentLine}
           />
-          <View style={styles.headerContent}>
+          <View style={[styles.headerContent, { paddingTop: insets.top + 8 }]}>
             <TouchableOpacity
               onPress={() => navigation.goBack()}
               style={styles.backBtn}
@@ -194,7 +196,7 @@ export default function GenreScreen({ route, navigation }) {
           renderItem={renderItem}
           numColumns={cols}
           key={cols}
-          contentContainerStyle={styles.grid}
+          contentContainerStyle={[styles.grid, { paddingTop: 100 + insets.top, paddingBottom: 24 + insets.bottom }]}
           ListEmptyComponent={renderEmpty}
           ListFooterComponent={renderFooter}
           onEndReached={handleLoadMore}

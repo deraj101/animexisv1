@@ -4,7 +4,7 @@ import { Alert, Platform } from 'react-native';
 
 const DOWNLOADS_KEY = 'animexis_offline_downloads';
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.124.88.17:3000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.180.34.17:3000';
 const DOWNLOAD_FORMAT_VERSION = 2;
 
 class DownloadService {
@@ -76,13 +76,45 @@ class DownloadService {
         const fileName = `${safeAnimeId}_ep${episode.number}.${fileExt}`;
         const fileUri = DOWNLOAD_DIR + fileName;
 
+        // Track time for smooth unknown-size estimation
+        const downloadStartTime = Date.now();
+        let lastProgressUpdate = 0;
+
         const callback = (downloadProgress) => {
             const expected = downloadProgress.totalBytesExpectedToWrite;
             const written = downloadProgress.totalBytesWritten || 0;
-            const progress = expected > 0
-                ? written / expected
-                : Math.min(0.95, 0.02 + Math.log10((written / 100000) + 1) * 0.35);
-            if (onProgress) onProgress(progress);
+
+            // Throttle updates to every 150ms to avoid UI jank
+            const now = Date.now();
+            if (now - lastProgressUpdate < 150 && written > 0) return;
+            lastProgressUpdate = now;
+
+            let progress;
+            const writtenMB = (written / (1024 * 1024)).toFixed(1);
+
+            if (expected > 0) {
+                // Known size — use real ratio, cap at 0.99 so the UI
+                // doesn't flash "100%" before the file is verified
+                progress = Math.min(0.99, written / expected);
+            } else {
+                // Unknown size — smooth asymptotic curve: 1 - 1/(1 + x)
+                // where x grows with bytes written. This reaches:
+                //   ~50% at 10 MB, ~80% at 40 MB, ~90% at 90 MB,
+                //   ~95% at 190 MB, ~99% at 990 MB
+                // Much smoother than the old log10 formula that capped at 95%
+                const x = written / (10 * 1024 * 1024); // normalize to ~10MB units
+                progress = Math.min(0.99, 1 - 1 / (1 + x));
+            }
+
+            if (onProgress) {
+                onProgress({
+                    progress,
+                    written,
+                    expected,
+                    writtenMB,
+                    isUnknown: expected <= 0
+                });
+            }
         };
 
         // 🚀 NEW: Get JWT token to authenticate the download proxy request
@@ -122,7 +154,8 @@ class DownloadService {
 
         try {
             const { uri } = await downloadResumable.downloadAsync();
-            if (onProgress) onProgress(1);
+            // Brief 100% update so UI shows completion before the alert
+            if (onProgress) onProgress({ progress: 1, written: 0, expected: 0, isUnknown: false });
             
             // 🚀 NEW: Verify file size
             const fileInfo = await FileSystem.getInfoAsync(uri);
@@ -138,6 +171,7 @@ class DownloadService {
                 animeImage: anime.image,
                 episodeNumber: episode.number,
                 episodeTitle: episode.title,
+                quality: episode.downloadQuality || 'Auto',
                 localUri: uri,
                 fileSize: fileInfo.size,
                 status: 'completed',

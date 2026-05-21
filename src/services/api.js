@@ -3,18 +3,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
 // Use env var if available (Vercel/Production), fallback to local IP for Expo Go
-const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://10.124.88.17:3000';
-console.log('[API] Using baseURL:', baseURL);
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.180.34.17:3000';
+console.log('[API] Using baseURL:', BASE_URL);
 
 const API = axios.create({ 
-  baseURL,
+  baseURL: BASE_URL,
   timeout: 60000 // 60s default (handles Render spin-up)
 });
 
-// Dedicated instance for slow scraping tasks
+// Dedicated instance for slow tasks (downloads, scraping)
 export const API_LONG = axios.create({
-  baseURL,
-  timeout: 60000 // 60s for AnimePahe/Downloads
+  baseURL: BASE_URL,
+  timeout: 60000 // 60s for Downloads/Slow tasks
 });
 
 // ── Attach JWT to every request automatically ─────────────────────────────────
@@ -36,7 +36,11 @@ API_LONG.interceptors.request.use(attachToken);
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────
 const errorLog = (err) => {
-  console.error(`[API ERROR] ${err.config?.method?.toUpperCase()} ${err.config?.url}:`, err.message);
+  // Suppress expected 401 polling errors so they don't spam the terminal
+  const isExpected401 = err.response?.status === 401 && err.config?.url?.includes('/api/auth/usage-status');
+  if (!isExpected401) {
+    console.error(`[API ERROR] ${err.config?.method?.toUpperCase()} ${err.config?.url}:`, err.message);
+  }
   return Promise.reject(err);
 };
 

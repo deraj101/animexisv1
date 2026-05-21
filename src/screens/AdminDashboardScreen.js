@@ -12,6 +12,8 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  useWindowDimensions,
+  Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,7 +21,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
-import API from "../services/api";
+import API, { BASE_URL } from "../services/api";
 import { C } from "../theme";
 import AppFooter from "../components/AppFooter";
 import DotCircleLoader from "../components/DotCircleLoader";
@@ -341,6 +343,159 @@ const UserRow = React.memo(function UserRow({
   );
 });
 
+// ─── SIDEBAR LAYOUT ──────────────────────────────────────────────────────────
+function SidebarLayout({ tabs, activeTab, setActiveTab, children }) {
+  const { width } = useWindowDimensions();
+  const isWide = width >= 768;
+  const sidebarWidth = isWide ? 200 : 56;
+
+  return (
+    <View style={sidebarStyles.container}>
+      {/* Sidebar */}
+      <View style={[sidebarStyles.sidebar, { width: sidebarWidth }]}>  
+        <View style={sidebarStyles.sidebarInner}>
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  sidebarStyles.navItem,
+                  isActive && sidebarStyles.navItemActive,
+                ]}
+                onPress={() => setActiveTab(tab.key)}
+                activeOpacity={0.7}
+              >
+                {isActive && <View style={sidebarStyles.navActiveBar} />}
+                <View style={[
+                  sidebarStyles.navIconWrap,
+                  isActive && sidebarStyles.navIconWrapActive,
+                ]}>
+                  <Ionicons
+                    name={isActive ? tab.icon.replace('-outline', '') : tab.icon}
+                    size={18}
+                    color={isActive ? C.crimson : C.dim}
+                  />
+                </View>
+                {isWide && (
+                  <Text
+                    style={[
+                      sidebarStyles.navLabel,
+                      isActive && sidebarStyles.navLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
+                  </Text>
+                )}
+                {tab.badge ? (
+                  <View style={[
+                    sidebarStyles.navBadge,
+                    tab.badgeColor && { backgroundColor: tab.badgeColor },
+                    !isWide && sidebarStyles.navBadgeCompact,
+                  ]}>
+                    <Text style={sidebarStyles.navBadgeText}>{tab.badge}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Content */}
+      <View style={sidebarStyles.content}>
+        {children}
+      </View>
+    </View>
+  );
+}
+
+const sidebarStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    minHeight: 400,
+  },
+  sidebar: {
+    backgroundColor: C.surface,
+    borderRightWidth: 1,
+    borderRightColor: C.border,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  sidebarInner: {
+    gap: 2,
+    paddingHorizontal: 6,
+  },
+  navItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  navItemActive: {
+    backgroundColor: C.crimsonDim,
+  },
+  navActiveBar: {
+    position: 'absolute',
+    left: 0,
+    top: 6,
+    bottom: 6,
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: C.crimson,
+  },
+  navIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  navIconWrapActive: {
+    backgroundColor: 'rgba(220,20,60,0.12)',
+  },
+  navLabel: {
+    color: C.dim,
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+  navLabelActive: {
+    color: C.white,
+    fontWeight: '700',
+  },
+  navBadge: {
+    backgroundColor: C.crimson,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 20,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  navBadgeCompact: {
+    position: 'absolute',
+    top: 6,
+    right: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    minWidth: 16,
+  },
+  navBadgeText: {
+    color: C.white,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  content: {
+    flex: 1,
+  },
+});
+
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
 export default function AdminDashboardScreen({ navigation }) {
   const { user, signOut } = useAuth();
@@ -386,6 +541,11 @@ export default function AdminDashboardScreen({ navigation }) {
   
   const [pendingUsers, setPendingUsers] = useState([]);
   const [subRequests, setSubRequests] = useState([]);
+  const [blockedAnimes, setBlockedAnimes] = useState([]);
+  const [blockSlug, setBlockSlug] = useState("");
+  const [modSearchQuery, setModSearchQuery] = useState("");
+  const [modSearchResults, setModSearchResults] = useState([]);
+  const [modSearching, setModSearching] = useState(false);
   
   // UI States for Forms & Modals
   const [userEditModal, setUserEditModal] = useState(null); // { email, name, subscription }
@@ -401,11 +561,17 @@ export default function AdminDashboardScreen({ navigation }) {
   const [cmsSearchQuery, setCmsSearchQuery] = useState("");
   const [cmsSearchResults, setCmsSearchResults] = useState([]);
   const [searchingCMS, setSearchingCMS] = useState(false);
+  const [cmsSearchPage, setCmsSearchPage] = useState(1);
+  const [cmsHasMore, setCmsHasMore] = useState(false);
 
   // Feedback Reply State
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
+
+  const [fetchingFanart, setFetchingFanart] = useState(false);
+  const [systemSettings, setSystemSettings] = useState(null);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -432,7 +598,7 @@ export default function AdminDashboardScreen({ navigation }) {
     const cfg = { headers: authHeader };
 
     try {
-      const [statsRes, animeRes, usersRes, activityRes, visitsRes, reportsRes, customRes, commentsRes, pendingUsersRes, subRequestsRes] = await Promise.allSettled([
+      const [statsRes, animeRes, usersRes, activityRes, visitsRes, reportsRes, customRes, commentsRes, pendingUsersRes, subRequestsRes, blockedRes, settingsRes] = await Promise.allSettled([
         API.get("/api/admin/stats",        cfg),
         API.get("/api/admin/top-anime",    cfg),
         API.get("/api/admin/recent-users?limit=50", cfg),
@@ -442,7 +608,9 @@ export default function AdminDashboardScreen({ navigation }) {
         API.get("/api/admin/anime", cfg),
         API.get("/api/admin/comments/all", cfg),
         API.get("/api/admin/pending-verifications", cfg),
-        API.get("/api/admin/subscription-requests", cfg)
+        API.get("/api/admin/subscription-requests", cfg),
+        API.get("/api/admin/blocked-anime", cfg),
+        API.get("/api/admin/settings", cfg)
       ]);
 
       if (statsRes.status === "fulfilled") {
@@ -484,7 +652,7 @@ export default function AdminDashboardScreen({ navigation }) {
       if (customRes.status === "fulfilled") {
         setCustomAnimes(customRes.value.data.animes || []);
       }
-      if (commentsRes.status === "fulfilled" && commentsRes.value.data) {
+      if (commentsRes.status === "fulfilled" && commentsRes.data) {
         setAllComments(commentsRes.value.data.comments || []);
       }
 
@@ -493,6 +661,12 @@ export default function AdminDashboardScreen({ navigation }) {
       }
       if (subRequestsRes?.status === "fulfilled") {
         setSubRequests(subRequestsRes.value.data.requests || []);
+      }
+      if (blockedRes?.status === "fulfilled") {
+        setBlockedAnimes(blockedRes.value.data.blocked || []);
+      }
+      if (settingsRes?.status === "fulfilled") {
+        setSystemSettings(settingsRes.value.data.settings || null);
       }
     } catch (err) {
       setApiError(err.message || "Failed to load dashboard data.");
@@ -663,19 +837,125 @@ export default function AdminDashboardScreen({ navigation }) {
     }
   }, [activityOffset, loadingMore, hasMoreActivity]);
 
+  const handleBlockAnime = async (slug, title = "") => {
+    try {
+      const cfg = { headers: await getAuthHeader() };
+      const res = await API.post("/api/admin/block-anime", { slug, title }, cfg);
+      if (res.data.success) {
+        setBlockedAnimes(prev => [res.data.blocked, ...prev]);
+        Alert.alert("Success", "Anime blocked successfully.");
+      }
+    } catch (err) {
+      Alert.alert("Error", err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleUnblockAnime = async (slug) => {
+    try {
+      const cfg = { headers: await getAuthHeader() };
+      const res = await API.delete(`/api/admin/block-anime/${slug}`, cfg);
+      if (res.data.success) {
+        setBlockedAnimes(prev => prev.filter(b => b.slug !== slug));
+        Alert.alert("Success", "Anime unblocked successfully.");
+      }
+    } catch (err) {
+      Alert.alert("Error", err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleSaveSettings = async (providerKey) => {
+    setSavingSettings(true);
+    try {
+      const cfg = { headers: await getAuthHeader() };
+      const res = await API.post("/api/admin/settings", { activeProvider: providerKey }, { headers: cfg.headers });
+      if (res.data.success) {
+        setSystemSettings(res.data.settings);
+        Alert.alert("Success", res.data.message || `Switched provider to ${providerKey}`);
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message;
+      Alert.alert("Error", msg);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Debounced Search for Moderation
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (modSearchQuery.length >= 3) {
+        handleModSearch();
+      } else if (modSearchQuery.length === 0) {
+        setModSearchResults([]);
+      }
+    }, 600);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [modSearchQuery]);
+
+  // Debounced Search for CMS
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (cmsSearchQuery.length >= 3) {
+        handleCMSSearch(1);
+      } else if (cmsSearchQuery.length === 0) {
+        setCmsSearchResults([]);
+      }
+    }, 600);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [cmsSearchQuery]);
+
+  const handleModSearch = async () => {
+    if (!modSearchQuery.trim()) return;
+    setModSearching(true);
+    try {
+      const cfg = { headers: await getAuthHeader() };
+      const res = await API.get(`/api/admin/search-global?q=${encodeURIComponent(modSearchQuery)}`, cfg);
+      setModSearchResults(res.data.results || []);
+    } catch (err) {
+      Alert.alert("Error", "Search failed.");
+    } finally {
+      setModSearching(false);
+    }
+  };
+
   const handleSignOut = useCallback(() => signOut(), [signOut]);
 
   // ── CMS Search & Import ──────────────────────────────────────────────────
-  const handleCMSSearch = async () => {
+  const handleCMSSearch = async (page = 1) => {
     if (!cmsSearchQuery.trim()) return;
-    setSearchingCMS(true);
+    
+    if (page === 1) {
+      setSearchingCMS(true);
+      setCmsSearchResults([]);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const res = await API.get(`/api/anime/search?q=${encodeURIComponent(cmsSearchQuery.trim())}`);
-      setCmsSearchResults(res.data.results || []);
+      const res = await API.get(`/api/anime/search?q=${encodeURIComponent(cmsSearchQuery.trim())}&page=${page}`);
+      const newResults = res.data.results || [];
+      
+      if (page === 1) {
+        setCmsSearchResults(newResults);
+      } else {
+        setCmsSearchResults(prev => [...prev, ...newResults]);
+      }
+
+      setCmsSearchPage(page);
+      setCmsHasMore(!!res.data.hasNextPage);
     } catch (err) {
       console.error("CMS Search error:", err);
     } finally {
       setSearchingCMS(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const handleCMSLoadMore = () => {
+    if (!searchingCMS && !loadingMore && cmsHasMore) {
+      handleCMSSearch(cmsSearchPage + 1);
     }
   };
 
@@ -697,6 +977,9 @@ export default function AdminDashboardScreen({ navigation }) {
           slug: res.data.slug,
           description: res.data.description,
           image: res.data.image,
+          banner: "",
+          titleLogo: "",
+          tvdbId: "",
           releaseDate: res.data.released || res.data.premiered || "",
           status: res.data.status || "Ongoing",
           genres: res.data.genres || [],
@@ -707,6 +990,26 @@ export default function AdminDashboardScreen({ navigation }) {
       Alert.alert("Error", "Failed to fetch global details for import.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFetchFanart = async () => {
+    if (!animeModal?.tvdbId) return Alert.alert("Error", "Please enter a TVDB ID first.");
+    setFetchingFanart(true);
+    try {
+      const cfg = { headers: await getAuthHeader() };
+      const res = await API.get(`/api/admin/fanart/${animeModal.tvdbId}`, cfg);
+      if (res.data.success && res.data.logos?.length > 0) {
+        const bestLogo = res.data.logos[0].url;
+        setAnimeModal(p => ({ ...p, titleLogo: bestLogo }));
+        Alert.alert("Success", "Logo found and applied!");
+      } else {
+        Alert.alert("Not Found", "No logos found for this ID.");
+      }
+    } catch (err) {
+      Alert.alert("Error", err.response?.data?.error || "Failed to fetch from Fanart.tv");
+    } finally {
+      setFetchingFanart(false);
     }
   };
 
@@ -781,17 +1084,24 @@ export default function AdminDashboardScreen({ navigation }) {
   };
 
   const handleDeleteAnime = async (id, title) => {
+    console.log('[Admin] Delete anime requested:', id, title);
+    if (!id) {
+      Alert.alert("Error", "Missing Anime ID");
+      return;
+    }
+    
     const performDelete = async () => {
       try {
-        const cfg = { headers: await getAuthHeader() };
-        await API.delete(`/api/admin/anime/${encodeURIComponent(id)}`, cfg);
+        console.log('[Admin] Deleting anime:', id);
+        await API.delete(`/api/admin/anime/${encodeURIComponent(id)}`);
         setCustomAnimes(prev => prev.filter(a => (a._id || a.id) !== id));
         if (Platform.OS === 'web') {
-           window.alert("Anime and episodes deleted.");
+           window.alert(`"${title}" and all its episodes deleted.`);
         } else {
-           Alert.alert("Success", "Anime and episodes deleted.");
+           Alert.alert("Deleted", `"${title}" and all its episodes have been removed.`);
         }
       } catch (err) { 
+        console.error('[Admin] Delete anime error:', err.response?.data || err.message);
         const msg = err.response?.data?.error || err.message;
         if (Platform.OS === 'web') window.alert("Error: " + msg);
         else Alert.alert("Error", msg);
@@ -799,14 +1109,18 @@ export default function AdminDashboardScreen({ navigation }) {
     };
 
     if (Platform.OS === 'web') {
-      if (window.confirm(`Are you sure you want to delete "${title}" and all its custom episodes?`)) {
-        performDelete();
+      if (window.confirm(`Delete "${title}" and all its episodes?`)) {
+        await performDelete();
       }
     } else {
-      Alert.alert("Delete Anime", `Are you sure you want to delete "${title}" and all its custom episodes?`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: performDelete }
-      ]);
+      Alert.alert(
+        "Delete Anime", 
+        `Are you sure you want to delete "${title}" and all its episodes? This cannot be undone.`, 
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => performDelete() }
+        ]
+      );
     }
   };
 
@@ -850,16 +1164,21 @@ export default function AdminDashboardScreen({ navigation }) {
   };
 
   const handleDeleteEpisode = async (id) => {
-    if (!id) return Alert.alert("Error", "Missing Episode ID");
+    console.log('[Admin] Delete episode requested:', id);
+    if (!id) {
+      Alert.alert("Error", "Missing Episode ID");
+      return;
+    }
     
     const performDelete = async () => {
       try {
-        const cfg = { headers: await getAuthHeader() };
-        await API.delete(`/api/admin/episodes/${encodeURIComponent(id)}`, cfg);
+        console.log('[Admin] Deleting episode:', id);
+        await API.delete(`/api/admin/episodes/${encodeURIComponent(id)}`);
         setCurrentEpisodes(prev => prev.filter(e => (e._id || e.id) !== id));
         if (Platform.OS === 'web') window.alert("Episode deleted.");
-        else Alert.alert("Success", "Episode deleted.");
+        else Alert.alert("Deleted", "Episode has been removed.");
       } catch (err) { 
+        console.error('[Admin] Delete episode error:', err.response?.data || err.message);
         const msg = err.response?.data?.error || err.message;
         if (Platform.OS === 'web') window.alert("Error: " + msg);
         else Alert.alert("Error", msg);
@@ -868,13 +1187,17 @@ export default function AdminDashboardScreen({ navigation }) {
 
     if (Platform.OS === 'web') {
       if (window.confirm("Delete this episode?")) {
-        performDelete();
+        await performDelete();
       }
     } else {
-      Alert.alert("Delete Episode", "Delete this episode?", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: performDelete }
-      ]);
+      Alert.alert(
+        "Delete Episode", 
+        "Are you sure you want to delete this episode?", 
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => performDelete() }
+        ]
+      );
     }
   };
 
@@ -992,6 +1315,11 @@ export default function AdminDashboardScreen({ navigation }) {
     return <SkeletonDashboard />;
   }
 
+  const getFanartProxyUrl = (url) => {
+    if (!url || !url.includes('fanart.tv')) return url;
+    return `${BASE_URL}/api/admin/fanart-proxy?url=${encodeURIComponent(url)}`;
+  };
+
   const TABS = [
     { key: "overview", label: "Overview", icon: "grid-outline" },
     { key: "users",    label: "Users",    icon: "people-outline" },
@@ -1000,9 +1328,11 @@ export default function AdminDashboardScreen({ navigation }) {
     { key: "subscriptions", label: "Payments", icon: "cash-outline",
       badge: subRequests.length > 0 ? subRequests.length : null, badgeColor: "#22c55e" },
     { key: "cms", label: "Content", icon: "film-outline" },
+    { key: "moderation", label: "Moderation", icon: "ban-outline" },
     { key: "comments", label: "Comments", icon: "chatbox-ellipses-outline" },
     { key: "announcements", label: "Announce", icon: "megaphone-outline" },
     { key: "feedbacks", label: "Feedback", icon: "help-buoy-outline" },
+    { key: "settings", label: "Settings", icon: "settings-outline" },
   ];
 
   return (
@@ -1088,30 +1418,12 @@ export default function AdminDashboardScreen({ navigation }) {
             </View>
           )}
 
-          {/* Tabs */}
-          <View style={styles.tabRow}>
-            {TABS.map((tab) => (
-              <TouchableOpacity
-                key={tab.key}
-                style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-                onPress={() => setActiveTab(tab.key)}
-              >
-                <Ionicons
-                  name={tab.icon}
-                  size={14}
-                  color={activeTab === tab.key ? C.crimson : C.dim}
-                />
-                <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
-                  {tab.label}
-                </Text>
-                {tab.badge ? (
-                  <View style={[styles.tabBadge, tab.badgeColor && { backgroundColor: tab.badgeColor }]}>
-                    <Text style={styles.tabBadgeText}>{tab.badge}</Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* Sidebar + Content Layout */}
+          <SidebarLayout
+            tabs={TABS}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+          >
 
           {/* ═══════════ OVERVIEW TAB ═══════════ */}
           {activeTab === "overview" && (
@@ -1241,9 +1553,7 @@ export default function AdminDashboardScreen({ navigation }) {
                         disabled={loadingMore}
                       >
                         {loadingMore ? (
-                          <View style={{ marginTop: 10 }}>
-                            <SkeletonGrid cardWidth={cardWidth} count={cols} />
-                          </View>
+                          <ActivityIndicator size="small" color={C.dimmer} />
                         ) : (
                           <>
                             <Text style={styles.loadMoreText}>Load More</Text>
@@ -1271,9 +1581,18 @@ export default function AdminDashboardScreen({ navigation }) {
                       <View style={styles.animeInfo}>
                         <Text style={styles.animeTitle} numberOfLines={1}>{item.title}</Text>
                       </View>
-                      <View style={styles.animeViewsWrap}>
-                        <Ionicons name="eye-outline" size={13} color={C.dimmer} />
-                        <Text style={styles.animeViews}>{item.views?.toLocaleString() ?? "—"}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <View style={styles.animeViewsWrap}>
+                          <Ionicons name="eye-outline" size={13} color={C.dimmer} />
+                          <Text style={styles.animeViews}>{item.views?.toLocaleString() ?? "—"}</Text>
+                        </View>
+                        <TouchableOpacity 
+                          style={[styles.miniActionBtn, { width: 26, height: 26 }]}
+                          onPress={() => handleDeleteAnime(item.slug, item.title)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons name="ban-outline" size={12} color={C.crimson} />
+                        </TouchableOpacity>
                       </View>
                     </View>
                   ))
@@ -1420,48 +1739,37 @@ export default function AdminDashboardScreen({ navigation }) {
           {/* ═══════════ CMS TAB (ANIME) ═══════════ */}
           {activeTab === "cms" && (
             <View style={styles.body}>
-              
-              {/* CMS Search Section */}
-              <View style={[styles.panel, { marginBottom: 20, padding: 16 }]}>
-                <Text style={[styles.modalTitle, { fontSize: 16, marginBottom: 12 }]}>Search Global Anime to Edit</Text>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <TextInput 
-                    style={[styles.simpleInput, { flex: 1, marginBottom: 0 }]}
-                    placeholder="Search global anime (e.g. Naruto)"
+              <View style={[styles.panel, { padding: 16, marginBottom: 20, zIndex: 20 }]}>
+                <Text style={{ color: C.dim, fontSize: 13, marginBottom: 12 }}>Search global database to import new anime.</Text>
+                <View style={{ zIndex: 25, flexDirection: 'row', gap: 10 }}>
+                  <TextInput
+                    style={[styles.modalInput, { flex: 1, minHeight: 40, padding: 12, marginBottom: 0 }]}
+                    placeholder="Search title..."
                     placeholderTextColor={C.dimmer}
                     value={cmsSearchQuery}
                     onChangeText={setCmsSearchQuery}
-                    onSubmitEditing={handleCMSSearch}
                   />
                   <TouchableOpacity 
-                    style={[styles.addBtn, { paddingHorizontal: 16, backgroundColor: 'rgba(75,163,255,0.1)', borderColor: 'rgba(75,163,255,0.3)' }]}
-                    onPress={handleCMSSearch}
+                    style={[styles.modalSubmitBtn, { width: 60, marginTop: 0 }]} 
+                    onPress={() => handleCMSSearch(1)}
+                    disabled={searchingCMS}
                   >
-                    {searchingCMS ? <ActivityIndicator size="small" color="#4ba3ff" /> : <Ionicons name="search" size={18} color="#4ba3ff" />}
+                    {searchingCMS ? <ActivityIndicator size="small" color={C.white} /> : <Ionicons name="search" size={18} color={C.white} />}
                   </TouchableOpacity>
                 </View>
 
                 {cmsSearchResults.length > 0 && (
-                  <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: C.border }}>
-                    <Text style={{ color: C.dim, fontSize: 12, marginBottom: 10 }}>Global Search Results:</Text>
-                    {cmsSearchResults.slice(0, 5).map((item, i) => (
-                      <View key={item.slug || i} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                         <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.white, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
-                            <Text style={{ color: C.dimmer, fontSize: 11 }}>{item.slug}</Text>
-                         </View>
-                         <TouchableOpacity 
-                           style={[styles.addBtn, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: C.border }]}
-                           onPress={() => handleImportAnime(item)}
-                         >
-                            <Ionicons name="cloud-download-outline" size={14} color={C.white} />
-                            <Text style={[styles.addBtnText, { color: C.white }]}>Import/Edit</Text>
-                         </TouchableOpacity>
-                      </View>
-                    ))}
-                    <TouchableOpacity onPress={() => setCmsSearchResults([])}>
-                       <Text style={{ color: C.crimson, fontSize: 12, textAlign: 'center', marginTop: 5 }}>Clear Results</Text>
-                    </TouchableOpacity>
+                  <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: C.border, maxHeight: 200 }}>
+                    <ScrollView nestedScrollEnabled>
+                      {cmsSearchResults.map((item, i) => (
+                        <View key={item.slug || i} style={{ flexDirection: 'row', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: C.border }}>
+                          <Text style={{ flex: 1, color: C.white, fontSize: 13 }} numberOfLines={1}>{item.title}</Text>
+                          <TouchableOpacity style={[styles.addBtn, { height: 28, paddingHorizontal: 12 }]} onPress={() => { handleImportAnime(item); setCmsSearchQuery(""); setCmsSearchResults([]); }}>
+                            <Text style={[styles.addBtnText, { fontSize: 11 }]}>Import</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </ScrollView>
                   </View>
                 )}
               </View>
@@ -1470,7 +1778,7 @@ export default function AdminDashboardScreen({ navigation }) {
                 <SectionHeader title={`Custom Anime (${customAnimes.length})`} icon="film-outline" />
                 <TouchableOpacity 
                   style={styles.addBtn}
-                  onPress={() => setAnimeModal({ title: "", slug: "", description: "", image: "", releaseDate: "", status: "Ongoing", genres: [], type: "TV" })}
+                  onPress={() => setAnimeModal({ title: "", slug: "", description: "", image: "", banner: "", titleLogo: "", tvdbId: "", releaseDate: "", status: "Ongoing", genres: [], type: "TV" })}
                 >
                   <Ionicons name="add" size={18} color={C.white} />
                   <Text style={styles.addBtnText}>Add New</Text>
@@ -1483,8 +1791,12 @@ export default function AdminDashboardScreen({ navigation }) {
                 ) : (
                   customAnimes.map((anime, i) => (
                     <View key={anime.slug || i} style={[styles.actRow, i < customAnimes.length - 1 && styles.actRowBorder]}>
-                      <View style={[styles.actIconWrap, { backgroundColor: 'rgba(220,20,60,0.1)', borderColor: 'rgba(220,20,60,0.3)' }]}>
-                        <Ionicons name="play" size={14} color={C.crimson} />
+                      <View style={[styles.actIconWrap, { backgroundColor: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)', padding: 4 }]}>
+                        {anime.titleLogo ? (
+                          <Image source={{ uri: getFanartProxyUrl(anime.titleLogo) }} resizeMode="contain" style={{ width: '100%', height: '100%' }} />
+                        ) : (
+                          <Ionicons name="play" size={14} color={C.crimson} />
+                        )}
                       </View>
                       <View style={styles.actInfo}>
                         <Text style={styles.actTitle} numberOfLines={1}>{anime.title}</Text>
@@ -1545,6 +1857,105 @@ export default function AdminDashboardScreen({ navigation }) {
                         activeOpacity={0.7}
                       >
                          <Ionicons name="trash-outline" size={16} color={C.crimson} />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* ═══════════ MODERATION TAB ═══════════ */}
+          {activeTab === "moderation" && (
+            <View style={styles.body}>
+              <SectionHeader title="Find Content to Block" icon="search-outline" />
+              <View style={[styles.panel, { padding: 16, marginBottom: 20 }]}>
+                <Text style={{ color: C.dim, fontSize: 13, marginBottom: 12 }}>
+                  Search for any anime globally to block it from the platform.
+                </Text>
+                <View style={{ zIndex: 10 }}>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TextInput
+                      style={[styles.modalInput, { flex: 1, minHeight: 40, padding: 12, marginBottom: 0 }]}
+                      placeholder="Search anime title..."
+                      placeholderTextColor={C.dimmer}
+                      value={modSearchQuery}
+                      onChangeText={setModSearchQuery}
+                    />
+                    <TouchableOpacity 
+                      style={[styles.modalSubmitBtn, { width: 60, marginTop: 0 }]} 
+                      onPress={handleModSearch}
+                      disabled={modSearching}
+                    >
+                      {modSearching ? <ActivityIndicator size="small" color={C.white} /> : <Ionicons name="search" size={18} color={C.white} />}
+                    </TouchableOpacity>
+                  </View>
+
+                  {modSearchResults.length > 0 && (
+                    <View style={{ 
+                      marginTop: 4, 
+                      backgroundColor: 'rgba(25,25,25,0.98)', 
+                      borderRadius: 12, 
+                      borderWidth: 1, 
+                      borderColor: C.border,
+                      maxHeight: 250,
+                      overflow: 'hidden',
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 10 },
+                      shadowOpacity: 0.5,
+                      shadowRadius: 15,
+                      elevation: 10
+                    }}>
+                      <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                        {modSearchResults.map((item, i) => (
+                          <TouchableOpacity 
+                            key={item.slug || i} 
+                            style={{ 
+                              flexDirection: 'row', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between', 
+                              padding: 12,
+                              borderBottomWidth: i < modSearchResults.length - 1 ? 1 : 0,
+                              borderBottomColor: 'rgba(255,255,255,0.05)'
+                            }}
+                            onPress={() => {
+                              handleBlockAnime(item.slug, item.title);
+                              setModSearchQuery("");
+                              setModSearchResults([]);
+                            }}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ color: C.white, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
+                              <Text style={{ color: C.dimmer, fontSize: 11 }}>{item.slug}</Text>
+                            </View>
+                            <Ionicons name="ban-outline" size={16} color={C.crimson} />
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <SectionHeader title={`Blocked Content (${blockedAnimes.length})`} icon="list-outline" />
+              <View style={styles.panel}>
+                {blockedAnimes.length === 0 ? (
+                  <Text style={styles.emptyText}>No anime blocked yet.</Text>
+                ) : (
+                  blockedAnimes.map((b, i) => (
+                    <View key={b.slug || i} style={[styles.actRow, i < blockedAnimes.length - 1 && styles.actRowBorder]}>
+                      <View style={[styles.actIconWrap, { backgroundColor: 'rgba(220,20,60,0.1)', borderColor: 'rgba(220,20,60,0.3)' }]}>
+                        <Ionicons name="ban" size={16} color={C.crimson} />
+                      </View>
+                      <View style={styles.actInfo}>
+                        <Text style={styles.actTitle}>{b.title || b.slug}</Text>
+                        <Text style={styles.actSub}>Slug: {b.slug}</Text>
+                      </View>
+                      <TouchableOpacity 
+                        style={[styles.miniActionBtn, { borderColor: 'rgba(34,197,94,0.3)' }]}
+                        onPress={() => handleUnblockAnime(b.slug)}
+                      >
+                        <Ionicons name="refresh-outline" size={14} color="#22c55e" />
                       </TouchableOpacity>
                     </View>
                   ))
@@ -1676,6 +2087,119 @@ export default function AdminDashboardScreen({ navigation }) {
             </View>
           )}
 
+          {/* ═══════════ SETTINGS TAB ═══════════ */}
+          {activeTab === "settings" && (
+            <View style={styles.body}>
+              <SectionHeader title="Scraper Domain Provider" icon="settings-outline" />
+              <View style={[styles.panel, { padding: 20 }]}>
+                <Text style={{ color: C.dim, fontSize: 13, lineHeight: 18, marginBottom: 20 }}>
+                  Switch between target scraped domains globally. The selected domain will instantly dispatch all requests for details and streaming resolving across all client platforms.
+                </Text>
+
+                {savingSettings && (
+                  <ActivityIndicator size="small" color={C.crimson} style={{ marginBottom: 15 }} />
+                )}
+
+                <View style={{ gap: 12 }}>
+                  {[
+                    {
+                      key: 'anitaku.cv',
+                      title: 'anitaku.cv (MangaStream Catalog)',
+                      desc: 'Modern, visual grid layout with high-quality spotlight banners. Extremely stable feeds.',
+                      color: '#4ba3ff'
+                    },
+                    {
+                      key: 'anitaku.io',
+                      title: 'anitaku.io (Traditional Gogo)',
+                      desc: 'Classic, stable database catalog format. High uptime but simple styling options.',
+                      color: '#eab308'
+                    },
+                    {
+                      key: 'anineko.to',
+                      title: 'anineko.to (Traditional Backup)',
+                      desc: 'Alternative domain for the traditional catalog format. Good backup option.',
+                      color: '#f97316'
+                    },
+                    {
+                      key: 'animekai.to',
+                      title: 'animekai.to (AnimeKai AJAX High-Speed)',
+                      desc: 'Brand new high-speed AJAX catalog featuring premium master playlist video player and direct stream playback.',
+                      color: C.crimson
+                    }
+                  ].map((prov) => {
+                    const isSelected = systemSettings?.activeProvider === prov.key;
+                    return (
+                      <TouchableOpacity
+                        key={prov.key}
+                        activeOpacity={0.8}
+                        onPress={() => handleSaveSettings(prov.key)}
+                        style={{
+                          backgroundColor: isSelected ? 'rgba(255,255,255,0.03)' : 'transparent',
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? prov.color : C.border,
+                          borderRadius: 16,
+                          padding: 16,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 14
+                        }}
+                      >
+                        <View style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          borderWidth: 2,
+                          borderColor: isSelected ? prov.color : C.dimmer,
+                          justifyContent: 'center',
+                          alignItems: 'center'
+                        }}>
+                          {isSelected && (
+                            <View style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: 5,
+                              backgroundColor: prov.color
+                            }} />
+                          )}
+                        </View>
+
+                        <View style={{ flex: 1, gap: 3 }}>
+                          <Text style={{
+                            color: isSelected ? C.white : C.dim,
+                            fontSize: 14,
+                            fontWeight: '700'
+                          }}>
+                            {prov.title}
+                          </Text>
+                          <Text style={{
+                            color: C.dimmer,
+                            fontSize: 11,
+                            lineHeight: 15
+                          }}>
+                            {prov.desc}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {systemSettings?.updatedAt && (
+                  <View style={{ marginTop: 24, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ color: C.dimmer, fontSize: 10 }}>
+                      Last updated by: {systemSettings.updatedBy || 'System'}
+                    </Text>
+                    <Text style={{ color: C.dimmer, fontSize: 10 }}>
+                      {new Date(systemSettings.updatedAt).toLocaleString()}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          </SidebarLayout>
+
           {/* ═══════════ FOOTER ═══════════ */}
 
           <AppFooter />
@@ -1803,6 +2327,43 @@ export default function AdminDashboardScreen({ navigation }) {
               
               <Text style={styles.inputLabel}>Banner Background URL</Text>
               <TextInput style={styles.simpleInput} value={animeModal?.banner || ""} onChangeText={t => setAnimeModal(p => ({ ...p, banner: t }))} placeholder="High-res wide image" placeholderTextColor={C.dimmer} />
+              
+              <View style={{ marginBottom: 15 }}>
+                <Text style={styles.inputLabel}>Fanart.tv ClearLogo</Text>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TextInput 
+                    style={[styles.simpleInput, { flex: 1, marginBottom: 0 }]} 
+                    value={animeModal?.tvdbId || ""} 
+                    onChangeText={t => setAnimeModal(p => ({ ...p, tvdbId: t }))} 
+                    placeholder="TVDB ID (e.g. 71668)" 
+                    placeholderTextColor={C.dimmer} 
+                  />
+                  <TouchableOpacity 
+                    style={[styles.addBtn, { backgroundColor: 'rgba(220,20,60,0.1)', borderColor: C.crimson }]} 
+                    onPress={handleFetchFanart}
+                    disabled={fetchingFanart}
+                  >
+                    {fetchingFanart ? <ActivityIndicator size="small" color={C.crimson} /> : <Text style={[styles.addBtnText, { color: C.crimson }]}>Fetch Logo</Text>}
+                  </TouchableOpacity>
+                </View>
+                {animeModal?.titleLogo ? (
+                  <View style={{ marginTop: 10, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                    <Image source={{ uri: getFanartProxyUrl(animeModal.titleLogo) }} resizeMode="contain" style={{ width: 120, height: 40 }} />
+                    <TouchableOpacity onPress={() => setAnimeModal(p => ({ ...p, titleLogo: "" }))}>
+                      <Text style={{ color: C.crimson, fontSize: 10, marginTop: 5 }}>Remove Logo</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+
+              <Text style={styles.inputLabel}>Title Logo URL (Manual)</Text>
+              <TextInput 
+                style={styles.simpleInput} 
+                value={animeModal?.titleLogo || ""} 
+                onChangeText={t => setAnimeModal(p => ({ ...p, titleLogo: t }))} 
+                placeholder="https://fanart.tv/..." 
+                placeholderTextColor={C.dimmer} 
+              />
               
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
