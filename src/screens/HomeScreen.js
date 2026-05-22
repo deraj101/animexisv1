@@ -15,7 +15,6 @@ import {
   Platform,
   useWindowDimensions,
   Alert,
-  ScrollView,
   Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -34,6 +33,81 @@ import AppFooter from "../components/AppFooter";
 import AnimeCard from "../components/AnimeCard";
 import DotCircleLoader from "../components/DotCircleLoader";
 
+const SEARCH_DEBOUNCE_MS = 120;
+const SEARCH_SKELETON_DELAY_MS = 180;
+const SUGGESTION_LIMIT = 10;
+const SEARCH_CACHE_TTL_MS = 5 * 60_000;
+const searchResultCache = new Map();
+
+const normalizeSearchKey = (text) => String(text || "").trim().toLowerCase();
+
+const getCachedSearch = (key) => {
+  const hit = searchResultCache.get(key);
+  if (!hit || Date.now() - hit.ts > SEARCH_CACHE_TTL_MS) {
+    searchResultCache.delete(key);
+    return null;
+  }
+  return hit.results;
+};
+
+const setCachedSearch = (key, results) => {
+  searchResultCache.set(key, { results, ts: Date.now() });
+  if (searchResultCache.size > 80) {
+    const oldestKey = searchResultCache.keys().next().value;
+    searchResultCache.delete(oldestKey);
+  }
+};
+
+const compactAnimeItem = (item) => ({
+  id: item.slug || item.id,
+  slug: item.slug || item.id,
+  title: item.title || "Unknown Anime",
+  image: item.image || null,
+  year: item.year,
+  isCustom: item.isCustom,
+});
+
+const getLocalSuggestions = (text, pools = [], limit = SUGGESTION_LIMIT) => {
+  const key = normalizeSearchKey(text);
+  const seen = new Set();
+  const merged = pools.flat().filter(Boolean);
+  const scored = merged
+    .map(compactAnimeItem)
+    .filter(item => {
+      const itemKey = item.slug || item.id || item.title;
+      if (!item.title || seen.has(itemKey)) return false;
+      seen.add(itemKey);
+      if (!key) return true;
+      return item.title.toLowerCase().includes(key);
+    })
+    .map(item => {
+      const title = item.title.toLowerCase();
+      const starts = key && title.startsWith(key) ? 0 : 1;
+      const index = key ? title.indexOf(key) : 0;
+      return { item, score: starts * 1000 + Math.max(index, 0) };
+    })
+    .sort((a, b) => a.score - b.score);
+
+  return scored.slice(0, limit).map(({ item }) => item);
+};
+
+const HighlightedTitle = React.memo(function HighlightedTitle({ title, query }) {
+  const cleanQuery = normalizeSearchKey(query);
+  const safeTitle = title || "Unknown Anime";
+  const index = cleanQuery ? safeTitle.toLowerCase().indexOf(cleanQuery) : -1;
+
+  if (index < 0) {
+    return <Text style={styles.suggestionTitle} numberOfLines={1}>{safeTitle}</Text>;
+  }
+
+  return (
+    <Text style={styles.suggestionTitle} numberOfLines={1}>
+      {safeTitle.slice(0, index)}
+      <Text style={styles.suggestionTitleHighlight}>{safeTitle.slice(index, index + cleanQuery.length)}</Text>
+      {safeTitle.slice(index + cleanQuery.length)}
+    </Text>
+  );
+});
 
 const getHeroHeight = (w) => {
   if (w >= 1200) return 500;
@@ -172,15 +246,15 @@ const ScheduleHomeCard = React.memo(function ScheduleHomeCard({ item, onPress, i
 });
 
 // ─── SUGGESTION ITEM ──────────────────────────────────────────────────────────
-const SuggestionItem = React.memo(function SuggestionItem({ item, onPress, index }) {
-  const translateX = useRef(new Animated.Value(-20)).current;
+const SuggestionItem = React.memo(function SuggestionItem({ item, onPress, index, query }) {
+  const translateX = useRef(new Animated.Value(-10)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 200, delay: index * 40, useNativeDriver: true }),
-      Animated.spring(translateX, { toValue: 0, delay: index * 40, tension: 100, friction: 10, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 140, delay: Math.min(index, 4) * 16, useNativeDriver: true }),
+      Animated.spring(translateX, { toValue: 0, delay: Math.min(index, 4) * 16, tension: 120, friction: 12, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -205,14 +279,19 @@ const SuggestionItem = React.memo(function SuggestionItem({ item, onPress, index
           <View style={styles.suggestionImageAccent} />
         </View>
         <View style={styles.suggestionInfo}>
-          <Text style={styles.suggestionTitle} numberOfLines={1}>{item.title}</Text>
+          <HighlightedTitle title={item.title} query={query} />
           {item.year && <Text style={styles.suggestionYear}>{item.year}</Text>}
         </View>
         <Ionicons name="chevron-forward" size={14} color={C.crimson} />
       </TouchableOpacity>
     </Animated.View>
   );
-});
+}, (prev, next) => (
+  prev.item?.id === next.item?.id &&
+  prev.item?.slug === next.item?.slug &&
+  prev.item?.title === next.item?.title &&
+  prev.query === next.query
+));
 
 
 const Section = React.memo(function Section({
@@ -420,12 +499,13 @@ export default function HomeScreen({ navigation }) {
   const [genres, setGenres] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]); // 🔍 NEW
-  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestSkeletonVisible, setSuggestSkeletonVisible] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
   const [error, setError] = useState(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchActive, setSearchActive] = useState(false);
   const [sectionsLoading, setSectionsLoading] = useState(true);
   const [playerLoading, setPlayerLoading] = useState(false);
 
@@ -433,7 +513,7 @@ export default function HomeScreen({ navigation }) {
   const [searchHasNext, setSearchHasNext] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // 📱 Mobile Menu State
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // 📱 Mobile Search State
   const [dailyUsage, setDailyUsage] = useState(null); // { count, limit, subscription }
   const [showLimitModal, setShowLimitModal] = useState(false); // 🚫 NEW
 
@@ -444,7 +524,12 @@ export default function HomeScreen({ navigation }) {
   const logoPulse = useRef(new Animated.Value(1)).current;
   const searchFocus = useRef(new Animated.Value(0)).current;
   const lastSearchRef = useRef({ query: "", results: [] });
+  const suggestionAbortRef = useRef(null);
+  const suggestionRequestRef = useRef(0);
+  const searchAbortRef = useRef(null);
+  const skeletonTimerRef = useRef(null);
   const shimmerX = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef(null); // Add ref for scrolling
   // ─── LOGIN & PAYMENT REDIRECT BRIDGE ───────────────────────────────────────
   useEffect(() => {
     (async () => {
@@ -685,22 +770,86 @@ export default function HomeScreen({ navigation }) {
   }, [fetchRecentEpisodes, fetchGenres]);
 
 
+  const localSuggestionPools = useMemo(
+    () => [trending, spotlight, recent, ongoing, schedule],
+    [trending, spotlight, recent, ongoing, schedule]
+  );
+
+  const idleSuggestions = useMemo(
+    () => getLocalSuggestions("", [trending, spotlight, recent], SUGGESTION_LIMIT),
+    [trending, spotlight, recent]
+  );
+
   const fetchSuggestions = useCallback(async (text) => {
-    if (!text || text.length < 1) {
-      setSuggestions([]);
-      setShowSuggestions(false);
+    const trimmed = text.trim();
+    const cacheKey = normalizeSearchKey(trimmed);
+    const requestId = ++suggestionRequestRef.current;
+
+    if (suggestionAbortRef.current) {
+      suggestionAbortRef.current.abort();
+    }
+    if (skeletonTimerRef.current) {
+      clearTimeout(skeletonTimerRef.current);
+      skeletonTimerRef.current = null;
+    }
+
+    if (!trimmed) {
+      setSuggestSkeletonVisible(false);
+      if (!searchActive) {
+        setShowSuggestions(false);
+        return;
+      }
+      const idle = searchHistory.length ? [] : idleSuggestions;
+      setSuggestions(idle);
+      setShowSuggestions(Boolean(searchHistory.length || idle.length));
       return;
     }
+
+    const localResults = getLocalSuggestions(trimmed, localSuggestionPools, SUGGESTION_LIMIT);
+    setSuggestions(localResults);
+    setShowSuggestions(true);
+
+    const cached = getCachedSearch(cacheKey);
+    if (cached) {
+      setSuggestions(cached);
+      setSuggestSkeletonVisible(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    suggestionAbortRef.current = controller;
+    setSuggestSkeletonVisible(false);
+    skeletonTimerRef.current = setTimeout(() => {
+      if (suggestionRequestRef.current === requestId) {
+        setSuggestSkeletonVisible(true);
+      }
+    }, SEARCH_SKELETON_DELAY_MS);
+
     try {
-      setSuggestLoading(true);
-      const res = await API.get(`/api/anime/search?q=${encodeURIComponent(text)}`);
-      const results = res.data.results || [];
-      lastSearchRef.current = { query: text, results };
-      setSuggestions(results.slice(0, 8));
-      setShowSuggestions(results.length > 0);
-    } catch { /* silent */ }
-    finally { setSuggestLoading(false); }
-  }, []);
+      const res = await API.get("/api/anime/suggestions", {
+        params: { q: trimmed, limit: SUGGESTION_LIMIT },
+        signal: controller.signal,
+      });
+      if (suggestionRequestRef.current !== requestId) return;
+      const remoteResults = (res.data.results || []).map(compactAnimeItem);
+      const merged = getLocalSuggestions(trimmed, [remoteResults, localResults], SUGGESTION_LIMIT);
+      setCachedSearch(cacheKey, merged);
+      setSuggestions(merged);
+      setShowSuggestions(true);
+    } catch (err) {
+      if (err?.code !== "ERR_CANCELED" && err?.name !== "CanceledError") {
+        setSuggestions(localResults);
+      }
+    } finally {
+      if (suggestionRequestRef.current === requestId) {
+        setSuggestSkeletonVisible(false);
+      }
+      if (skeletonTimerRef.current) {
+        clearTimeout(skeletonTimerRef.current);
+        skeletonTimerRef.current = null;
+      }
+    }
+  }, [idleSuggestions, localSuggestionPools, searchActive, searchHistory.length]);
 
   const searchAnime = useCallback((text, activePage = 1) => {
     if (!text || text.length < 2) return;
@@ -712,8 +861,17 @@ export default function HomeScreen({ navigation }) {
       setShowSuggestions(false);
       return;
     }
+    if (searchAbortRef.current) searchAbortRef.current.abort();
+    searchAbortRef.current = new AbortController();
     setSearchLoading(true);
-    API.get(`/api/anime/search?q=${encodeURIComponent(text)}&page=${activePage}&email=${user?.email ? encodeURIComponent(user.email) : ''}`)
+    API.get("/api/anime/search", {
+      params: {
+        q: text,
+        page: activePage,
+        email: user?.email || "",
+      },
+      signal: searchAbortRef.current.signal,
+    })
       .then(res => {
 
         const results = res.data.results || [];
@@ -723,15 +881,26 @@ export default function HomeScreen({ navigation }) {
         setSearchPage(activePage);
         setSuggestions([]);
         setShowSuggestions(false);
+        if (activePage === 1 && scrollViewRef.current) {
+          scrollViewRef.current.scrollTo({ y: 0, animated: true });
+        }
       })
-      .catch(() => setError("Search failed"))
+      .catch((err) => {
+        if (err?.code !== "ERR_CANCELED" && err?.name !== "CanceledError") setError("Search failed");
+      })
       .finally(() => setSearchLoading(false));
-  }, []);
+  }, [user?.email]);
 
   useEffect(() => {
-    const t = setTimeout(() => fetchSuggestions(query.trim()), 400);
+    const t = setTimeout(() => fetchSuggestions(query.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [query, fetchSuggestions]);
+
+  useEffect(() => () => {
+    suggestionAbortRef.current?.abort();
+    searchAbortRef.current?.abort();
+    if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current);
+  }, []);
 
   const heroItem = activeData[heroIndex];
 
@@ -760,6 +929,24 @@ export default function HomeScreen({ navigation }) {
     setShowSuggestions(false);
     searchAnime(item.title);
   }, [searchAnime]);
+
+  const renderSuggestionItem = useCallback(({ item, index }) => (
+    <SuggestionItem
+      item={item}
+      index={index}
+      query={query}
+      onPress={(it) => {
+        handleSuggestionSelect(it);
+        setShowSuggestions(false);
+        setMobileSearchOpen(false);
+      }}
+    />
+  ), [handleSuggestionSelect, query]);
+
+  const suggestionKeyExtractor = useCallback(
+    (item, index) => `suggestion-${item.slug || item.id || item.title || index}`,
+    []
+  );
 
   const navigateToDetails = useCallback((item) => {
     const animeId = getAnimeId(item);
@@ -819,6 +1006,29 @@ export default function HomeScreen({ navigation }) {
     }
   }, [user?.email]);
 
+  // ── FULL HOME RESET (Logo / Home Tab press) ──
+  const resetToHome = useCallback(() => {
+    setQuery("");
+    setAnime([]);
+    setSearchPage(1);
+    setSearchHasNext(false);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setMobileSearchOpen(false);
+    lastSearchRef.current = { query: "", results: [], page: 1, hasNextPage: false };
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({ y: 0, animated: true });
+    }
+  }, []);
+
+  // Listen for Home tab press to fully reset search state
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', (e) => {
+      resetToHome();
+    });
+    return unsubscribe;
+  }, [navigation, resetToHome]);
+
   const clearHistory = useCallback(async () => {
     if (!user?.email) return;
     try {
@@ -843,11 +1053,13 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.navbarLine} />
         <View style={[styles.navContent, { paddingTop: insets.top }]}>
           <Animated.View style={{ transform: [{ scale: logoPulse }] }}>
-            <View style={styles.logoRow}>
-              <Text style={styles.logo}>
-                Anime<Text style={{ color: C.crimson }}>xis</Text>
-              </Text>
-            </View>
+            <TouchableOpacity onPress={resetToHome} activeOpacity={0.7}>
+              <View style={styles.logoRow}>
+                <Text style={styles.logo}>
+                  Anime<Text style={{ color: C.crimson }}>xis</Text>
+                </Text>
+              </View>
+            </TouchableOpacity>
           </Animated.View>
 
           {width >= 768 ? (
@@ -859,7 +1071,7 @@ export default function HomeScreen({ navigation }) {
                     width: width >= 768 ? 280 : 210,
                   }
                 ]}>
-                  {suggestLoading
+                  {suggestSkeletonVisible
                     ? <DotCircleLoader size={18} color={C.crimson} />
                     : <Ionicons name="search" size={16} color={C.dim} style={styles.searchIcon} />
                   }
@@ -867,16 +1079,26 @@ export default function HomeScreen({ navigation }) {
                     value={query}
                     onChangeText={(text) => {
                       setQuery(text);
-                      if (!text) clearSearch();
+                      setShowSuggestions(true);
+                      if (!text) {
+                        setAnime([]);
+                        setSearchPage(1);
+                        setSearchHasNext(false);
+                      }
                     }}
                     placeholder="Search anime…"
                     placeholderTextColor={C.dimmer}
                     style={[styles.searchInput, { paddingVertical: 0 }]}
                     returnKeyType="search"
                     onFocus={() => {
-                      if (suggestions.length > 0) setShowSuggestions(true);
+                      setSearchActive(true);
+                      setShowSuggestions(true);
+                      if (!query.trim() && idleSuggestions.length > 0 && searchHistory.length === 0) {
+                        setSuggestions(idleSuggestions);
+                      }
                     }}
                     onBlur={() => {
+                      setSearchActive(false);
                       setTimeout(() => setShowSuggestions(false), 150);
                     }}
                     onSubmitEditing={() => { searchAnime(query.trim()); setShowSuggestions(false); }}
@@ -909,21 +1131,20 @@ export default function HomeScreen({ navigation }) {
                         <Ionicons name="close" size={14} color={C.dim} />
                       </TouchableOpacity>
                     </View>
-                    <ScrollView
+                    <FlatList
+                      data={suggestions}
+                      renderItem={renderSuggestionItem}
+                      keyExtractor={suggestionKeyExtractor}
                       style={{ maxHeight: 320 }}
                       keyboardShouldPersistTaps="handled"
                       showsVerticalScrollIndicator={false}
                       nestedScrollEnabled
-                    >
-                      {suggestions.map((item, index) => (
-                        <SuggestionItem
-                          key={`dd-${item.slug || item.id || index}`}
-                          item={item}
-                          index={index}
-                          onPress={(it) => { handleSuggestionSelect(it); setShowSuggestions(false); }}
-                        />
-                      ))}
-                    </ScrollView>
+                      initialNumToRender={8}
+                      maxToRenderPerBatch={8}
+                      windowSize={4}
+                      removeClippedSubviews={Platform.OS !== "web"}
+                      getItemLayout={(_, index) => ({ length: 75, offset: 75 * index, index })}
+                    />
                   </Animated.View>
                 )}
 
@@ -965,9 +1186,7 @@ export default function HomeScreen({ navigation }) {
                 )}
               </View>
 
-
               <View style={styles.navRight}>
-
                 <TouchableOpacity
                   onPress={() => navigation.navigate("Notifications")}
                   style={styles.navIconBtn}
@@ -982,7 +1201,7 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  onPress={() => navigation.navigate("Profile")}
+                  onPress={() => navigation.navigate("ProfileTab")}
                   style={styles.avatarBtn}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
@@ -1001,120 +1220,141 @@ export default function HomeScreen({ navigation }) {
               </View>
             </>
           ) : (
-            <TouchableOpacity
-              onPress={() => setMobileMenuOpen(!mobileMenuOpen)}
-              style={styles.navIconBtn}
-              activeOpacity={0.7}
-            >
-              <Ionicons name={mobileMenuOpen ? "close" : "menu"} size={28} color={C.white} />
-              {unreadCount > 0 && !mobileMenuOpen && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* ── MOBILE MENU DROPDOWN ── */}
-        {width < 768 && mobileMenuOpen && (
-          <View style={[styles.mobileMenuDropdown, { top: 86 + insets.top }]}>
-            <View style={styles.searchContainer}>
-              <Animated.View style={[
-                styles.searchWrapper,
-                {
-                  width: "100%",
-                }
-              ]}>
-                {suggestLoading
-                  ? <DotCircleLoader size={18} color={C.crimson} />
-                  : <Ionicons name="search" size={16} color={C.dim} style={styles.searchIcon} />
-                }
-                <TextInput
-                  value={query}
-                  onChangeText={(text) => {
-                    setQuery(text);
-                    if (!text) clearSearch();
-                  }}
-                  placeholder="Search anime…"
-                  placeholderTextColor={C.dimmer}
-                  style={[styles.searchInput, { paddingVertical: 0 }]}
-                  returnKeyType="search"
-                  onFocus={() => {
-                    if (suggestions.length > 0) setShowSuggestions(true);
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => setShowSuggestions(false), 150);
-                  }}
-                  onSubmitEditing={() => { searchAnime(query.trim()); setShowSuggestions(false); setMobileMenuOpen(false); }}
-                />
-                {query.length > 0 && (
-                  <TouchableOpacity onPress={clearSearch} style={styles.clearButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="close-circle" size={16} color={C.dim} />
-                  </TouchableOpacity>
-                )}
-              </Animated.View>
-
-              {showSuggestions && suggestions.length > 0 && (
-                <View style={[styles.suggestionsDropdown, { width: "100%", position: 'relative', top: 8, zIndex: 1200 }]}>
-                  <View style={styles.dropdownAccentLine} />
-                  <View style={styles.dropdownHeader}>
-                    <Text style={styles.dropdownHeaderText}>Results ({suggestions.length})</Text>
-                  </View>
-                  <ScrollView style={{ maxHeight: 200 }} keyboardShouldPersistTaps="handled">
-                    {suggestions.map((item, index) => (
-                      <SuggestionItem
-                        key={`mdd-${item.slug || item.id || index}`}
-                        item={item}
-                        index={index}
-                        onPress={(it) => { handleSuggestionSelect(it); setShowSuggestions(false); setMobileMenuOpen(false); }}
-                      />
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.mobileNavRow}>
+            <View style={styles.navRight}>
               <TouchableOpacity
-                onPress={() => { setMobileMenuOpen(false); navigation.navigate("Schedule"); }}
-                style={styles.mobileNavBtn}
+                onPress={() => setMobileSearchOpen(!mobileSearchOpen)}
+                style={styles.navIconBtn}
+                activeOpacity={0.7}
               >
-                <Ionicons name="calendar-outline" size={20} color={C.white} />
-                <Text style={styles.mobileNavText}>Schedule</Text>
+                <Ionicons name={mobileSearchOpen ? "close" : "search"} size={26} color={C.white} />
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => { setMobileMenuOpen(false); navigation.navigate("Notifications"); }}
-                style={styles.mobileNavBtn}
+                onPress={() => navigation.navigate("Notifications")}
+                style={[styles.navIconBtn, { marginLeft: 10 }]}
+                activeOpacity={0.7}
               >
-                <Ionicons name="notifications-outline" size={20} color={C.white} />
-                <Text style={styles.mobileNavText}>Notifications</Text>
+                <Ionicons name="notifications-outline" size={24} color={C.white} />
                 {unreadCount > 0 && (
-                  <View style={styles.mobileNotifBadge}>
+                  <View style={styles.notifBadge}>
                     <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
                   </View>
                 )}
               </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => { setMobileMenuOpen(false); navigation.navigate("Profile"); }}
-                style={styles.mobileNavBtn}
-              >
-                <Ionicons name="person-circle-outline" size={20} color={C.white} />
-                <Text style={styles.mobileNavText}>Profile</Text>
-              </TouchableOpacity>
             </View>
-          </View>
-        )}
+          )}
+        </View>
       </Animated.View>
+
+      {/* ── MOBILE SEARCH DROPDOWN (MOVED OUTSIDE NAVBAR FOR TOUCH FIX) ── */}
+      {width < 768 && mobileSearchOpen && (
+        <View style={[styles.mobileMenuDropdown, { top: 86 + insets.top, zIndex: 1100, elevation: 10, position: 'absolute' }]}>
+          <View style={styles.searchContainer}>
+            <Animated.View style={[
+              styles.searchWrapper,
+              { width: "100%" }
+            ]}>
+              {suggestSkeletonVisible
+                ? <DotCircleLoader size={18} color={C.crimson} />
+                : <Ionicons name="search" size={16} color={C.dim} style={styles.searchIcon} />
+              }
+              <TextInput
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  setShowSuggestions(true);
+                  if (!text) {
+                    setAnime([]);
+                    setSearchPage(1);
+                    setSearchHasNext(false);
+                  }
+                }}
+                placeholder="Search anime…"
+                placeholderTextColor={C.dimmer}
+                style={[styles.searchInput, { paddingVertical: 0 }]}
+                returnKeyType="search"
+                autoFocus={true}
+                onFocus={() => {
+                  setSearchActive(true);
+                  setShowSuggestions(true);
+                  if (!query.trim() && idleSuggestions.length > 0 && searchHistory.length === 0) {
+                    setSuggestions(idleSuggestions);
+                  }
+                }}
+                onBlur={() => {
+                  setSearchActive(false);
+                  setTimeout(() => setShowSuggestions(false), 150);
+                }}
+                onSubmitEditing={() => { searchAnime(query.trim()); setShowSuggestions(false); setMobileSearchOpen(false); }}
+              />
+              {query.length > 0 && (
+                <TouchableOpacity onPress={clearSearch} style={styles.clearButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={16} color={C.dim} />
+                </TouchableOpacity>
+              )}
+            </Animated.View>
+
+            {showSuggestions && suggestions.length > 0 && (
+              <View style={[styles.suggestionsDropdown, { width: "100%", position: 'relative', top: 8, zIndex: 1200 }]}>
+                <View style={styles.dropdownAccentLine} />
+                <View style={styles.dropdownHeader}>
+                  <Text style={styles.dropdownHeaderText}>Results ({suggestions.length})</Text>
+                </View>
+                <FlatList
+                  data={suggestions}
+                  renderItem={renderSuggestionItem}
+                  keyExtractor={suggestionKeyExtractor}
+                  style={{ maxHeight: Math.min(360, Math.max(220, width * 0.72)) }}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled
+                  initialNumToRender={8}
+                  maxToRenderPerBatch={8}
+                  windowSize={4}
+                  removeClippedSubviews={Platform.OS !== "web"}
+                  getItemLayout={(_, index) => ({ length: 75, offset: 75 * index, index })}
+                />
+              </View>
+            )}
+
+            {showSuggestions && query.length === 0 && searchHistory.length > 0 && (
+              <View style={[styles.suggestionsDropdown, { width: "100%", position: 'relative', top: 8, zIndex: 1200 }]}>
+                <View style={styles.dropdownAccentLine} />
+                <View style={styles.dropdownHeader}>
+                  <Text style={styles.dropdownHeaderText}>Recent Searches</Text>
+                  <TouchableOpacity onPress={clearHistory} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Text style={{ color: C.crimson, fontSize: 11, fontWeight: "600" }}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
+                {searchHistory.slice(0, SUGGESTION_LIMIT).map((item, index) => (
+                  <TouchableOpacity
+                    key={`mhist-${index}`}
+                    style={styles.historyItem}
+                    onPress={() => {
+                      setQuery(item.query);
+                      searchAnime(item.query);
+                      setShowSuggestions(false);
+                      setMobileSearchOpen(false);
+                    }}
+                  >
+                    <Ionicons name="time-outline" size={14} color={C.dim} style={{ marginRight: 10 }} />
+                    <Text style={styles.historyText} numberOfLines={1}>{item.query}</Text>
+                    <Ionicons name="arrow-forward" size={12} color={C.surfaceHigh} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* ── SCROLL CONTENT ── */}
       <Animated.ScrollView
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingTop: 100 + insets.top,
-          paddingBottom: 24 + insets.bottom,
+          paddingBottom: (width < 768 ? 110 : 24) + insets.bottom,
           flexGrow: 1
         }}
         onScroll={Animated.event(
@@ -1672,6 +1912,7 @@ const styles = StyleSheet.create({
   historyText: { flex: 1, color: C.white, fontSize: 13, fontWeight: "500" },
   suggestionItem: {
     flexDirection: "row", alignItems: "center",
+    minHeight: 75,
     paddingVertical: 10, paddingHorizontal: 14,
     gap: 12,
     borderBottomWidth: 1, borderBottomColor: C.border,
@@ -1684,6 +1925,7 @@ const styles = StyleSheet.create({
   },
   suggestionInfo: { flex: 1 },
   suggestionTitle: { color: C.white, fontSize: 13, fontWeight: "600", marginBottom: 2 },
+  suggestionTitleHighlight: { color: C.crimson, fontWeight: "900" },
   suggestionYear: { color: C.dim, fontSize: 11 },
 
   heroContainer: {

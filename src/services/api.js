@@ -1,6 +1,5 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
 
 // Use env var if available (Vercel/Production), fallback to local IP for Expo Go
 export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.180.34.17:3000';
@@ -36,6 +35,9 @@ API_LONG.interceptors.request.use(attachToken);
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────
 const errorLog = (err) => {
+  if (err?.code === "ERR_CANCELED" || err?.name === "CanceledError") {
+    return Promise.reject(err);
+  }
   // Suppress expected 401 polling errors so they don't spam the terminal
   const isExpected401 = err.response?.status === 401 && err.config?.url?.includes('/api/auth/usage-status');
   if (!isExpected401) {
