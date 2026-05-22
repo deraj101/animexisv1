@@ -20,12 +20,12 @@ export default function LibraryScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + (Platform.OS === "ios" ? 10 : 20) }]}>
+      <View style={[styles.header, { paddingTop: insets.top + (Platform.OS === "ios" ? 6 : 12) }]}>
         <Text style={styles.headerTitle}>Your Library</Text>
       </View>
 
       <ScrollView 
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 88 }]}
         showsVerticalScrollIndicator={false}
       >
         {!user ? (
@@ -73,14 +73,14 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.05)",
     backgroundColor: C.surface,
   },
   headerTitle: {
     color: C.white,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "900",
     letterSpacing: -0.5,
   },

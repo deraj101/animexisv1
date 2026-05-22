@@ -37,6 +37,8 @@ const SEARCH_DEBOUNCE_MS = 120;
 const SEARCH_SKELETON_DELAY_MS = 180;
 const SUGGESTION_LIMIT = 10;
 const SEARCH_CACHE_TTL_MS = 5 * 60_000;
+const PERSISTED_CACHE_PREFIX = "api_cache:";
+const SEARCH_RESULT_CACHE_PREFIX = "search_cache:";
 const searchResultCache = new Map();
 
 const normalizeSearchKey = (text) => String(text || "").trim().toLowerCase();
@@ -67,6 +69,25 @@ const compactAnimeItem = (item) => ({
   isCustom: item.isCustom,
 });
 
+const getAnimeIdentity = (item) => (
+  item?.slug || item?.id || item?.url || item?.title || ""
+);
+
+const getUniqueAnimeKey = (prefix, item, index) => {
+  const rawKey = getAnimeIdentity(item) || index;
+  return `${prefix}-${String(rawKey).trim().toLowerCase()}-${index}`;
+};
+
+const dedupeAnimeItems = (items = []) => {
+  const seen = new Set();
+  return items.filter((item, index) => {
+    const key = String(getAnimeIdentity(item) || index).trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const getLocalSuggestions = (text, pools = [], limit = SUGGESTION_LIMIT) => {
   const key = normalizeSearchKey(text);
   const seen = new Set();
@@ -74,7 +95,7 @@ const getLocalSuggestions = (text, pools = [], limit = SUGGESTION_LIMIT) => {
   const scored = merged
     .map(compactAnimeItem)
     .filter(item => {
-      const itemKey = item.slug || item.id || item.title;
+      const itemKey = String(getAnimeIdentity(item)).trim().toLowerCase();
       if (!item.title || seen.has(itemKey)) return false;
       seen.add(itemKey);
       if (!key) return true;
@@ -121,9 +142,34 @@ const _cache = {};
 const cachedGet = async (url, ttlMs = 60_000) => {
   const hit = _cache[url];
   if (hit && Date.now() - hit.ts < ttlMs) return hit.data;
-  const res = await API.get(url);
-  _cache[url] = { data: res, ts: Date.now() };
-  return res;
+
+  const storageKey = `${PERSISTED_CACHE_PREFIX}${url}`;
+  try {
+    const raw = await AsyncStorage.getItem(storageKey);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved?.ts && Date.now() - saved.ts < ttlMs) {
+        const restored = { data: saved.data };
+        _cache[url] = { data: restored, ts: saved.ts };
+        return restored;
+      }
+    }
+  } catch {}
+
+  try {
+    const res = await API.get(url);
+    const ts = Date.now();
+    _cache[url] = { data: res, ts };
+    AsyncStorage.setItem(storageKey, JSON.stringify({ data: res.data, ts })).catch(() => {});
+    return res;
+  } catch (err) {
+    const raw = await AsyncStorage.getItem(storageKey).catch(() => null);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved?.data) return { data: saved.data };
+    }
+    throw err;
+  }
 };
 
 // ─── ONGOING CARD (Horizontal) ────────────────────────────────────────────────
@@ -507,6 +553,7 @@ export default function HomeScreen({ navigation }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
   const [sectionsLoading, setSectionsLoading] = useState(true);
+  const [serverWaking, setServerWaking] = useState(false);
   const [playerLoading, setPlayerLoading] = useState(false);
 
   const [searchPage, setSearchPage] = useState(1);
@@ -587,7 +634,7 @@ export default function HomeScreen({ navigation }) {
 
   const navbarHeight = scrollY.interpolate({
     inputRange: [0, 120],
-    outputRange: [88 + insets.top, 68 + insets.top],
+    outputRange: [76 + insets.top, 60 + insets.top],
     extrapolate: "clamp"
   });
 
@@ -617,6 +664,7 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     if (!sectionsLoading) return;
+    const wakeTimer = setTimeout(() => setServerWaking(true), 4500);
     shimmerX.setValue(0);
     const anim = Animated.loop(
       Animated.sequence([
@@ -634,7 +682,11 @@ export default function HomeScreen({ navigation }) {
       ])
     );
     anim.start();
-    return () => anim.stop();
+    return () => {
+      clearTimeout(wakeTimer);
+      setServerWaking(false);
+      anim.stop();
+    };
   }, [sectionsLoading]);
 
 
@@ -696,13 +748,13 @@ export default function HomeScreen({ navigation }) {
   const fetchRecentEpisodes = useCallback(async () => {
     try {
       setError(null);
-      const [recentRes, popularRes, spotlightRes, ongoingRes, scheduleRes] = await Promise.all([
-        cachedGet("/api/anime/recent?page=1", 60_000).catch(() => null),
-        cachedGet("/api/anime/popular?page=1", 3600_000).catch(() => null),
-        cachedGet("/api/anime/spotlight", 60_000).catch(() => null),
-        cachedGet("/api/anime/ongoing?page=1", 3600_000).catch(() => null),
-        cachedGet("/api/anime/schedule", 3600_000).catch(() => null)
-      ]);
+      const homeRes = await cachedGet("/api/anime/home", 15 * 60_000).catch(() => null);
+      const home = homeRes?.data?.success ? homeRes.data : null;
+      const recentRes = home ? { data: home.recent } : null;
+      const popularRes = home ? { data: home.popular } : null;
+      const spotlightRes = home ? { data: home.spotlight } : null;
+      const ongoingRes = home ? { data: home.ongoing } : null;
+      const scheduleRes = home ? { data: home.schedule } : null;
 
       if (recentRes?.data?.success && recentRes.data.episodes) setRecent(recentRes.data.episodes);
       if (ongoingRes?.data?.success && ongoingRes.data.series) setOngoing(ongoingRes.data.series);
@@ -716,7 +768,7 @@ export default function HomeScreen({ navigation }) {
       }
 
     } catch {
-      setError("Failed to load data");
+      setError("Server is taking longer than usual. Showing saved data when available.");
     } finally {
       setSectionsLoading(false);
     }
@@ -724,7 +776,7 @@ export default function HomeScreen({ navigation }) {
 
   const fetchGenres = useCallback(async () => {
     try {
-      const res = await cachedGet("/api/anime/genres", 5 * 60_000);
+      const res = await cachedGet("/api/anime/genres", 24 * 60 * 60_000);
       const raw = res.data.genres || [];
       const seen = new Set();
       const flat = [];
@@ -759,7 +811,7 @@ export default function HomeScreen({ navigation }) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     // 🕵️‍♂️ Clear cache for all main sections to force fresh fetch
-    ["/api/anime/recent?page=1", "/api/anime/popular?page=1", "/api/anime/spotlight", "/api/anime/ongoing?page=1", "/api/anime/schedule"].forEach(k => delete _cache[k]);
+    ["/api/anime/home", "/api/anime/recent?page=1", "/api/anime/popular?page=1", "/api/anime/spotlight", "/api/anime/ongoing?page=1", "/api/anime/schedule"].forEach(k => delete _cache[k]);
     
     await Promise.all([
       fetchRecentEpisodes(), 
@@ -831,7 +883,7 @@ export default function HomeScreen({ navigation }) {
         signal: controller.signal,
       });
       if (suggestionRequestRef.current !== requestId) return;
-      const remoteResults = (res.data.results || []).map(compactAnimeItem);
+      const remoteResults = dedupeAnimeItems(res.data.results || []).map(compactAnimeItem);
       const merged = getLocalSuggestions(trimmed, [remoteResults, localResults], SUGGESTION_LIMIT);
       setCachedSearch(cacheKey, merged);
       setSuggestions(merged);
@@ -851,7 +903,7 @@ export default function HomeScreen({ navigation }) {
     }
   }, [idleSuggestions, localSuggestionPools, searchActive, searchHistory.length]);
 
-  const searchAnime = useCallback((text, activePage = 1) => {
+  const searchAnime = useCallback(async (text, activePage = 1) => {
     if (!text || text.length < 2) return;
     if (lastSearchRef.current.query === text && lastSearchRef.current.page === activePage) {
       setAnime(lastSearchRef.current.results);
@@ -864,31 +916,55 @@ export default function HomeScreen({ navigation }) {
     if (searchAbortRef.current) searchAbortRef.current.abort();
     searchAbortRef.current = new AbortController();
     setSearchLoading(true);
-    API.get("/api/anime/search", {
-      params: {
-        q: text,
-        page: activePage,
-        email: user?.email || "",
-      },
-      signal: searchAbortRef.current.signal,
-    })
-      .then(res => {
+    const normalized = normalizeSearchKey(text);
+    const storageKey = `${SEARCH_RESULT_CACHE_PREFIX}${normalized}:${activePage}`;
+    const applyResults = (data) => {
+      const results = dedupeAnimeItems(data?.results || []);
+      lastSearchRef.current = { query: text, results, page: activePage, hasNextPage: data?.hasNextPage };
+      setAnime(results);
+      setSearchHasNext(data?.hasNextPage);
+      setSearchPage(activePage);
+      setSuggestions([]);
+      setShowSuggestions(false);
+      if (activePage === 1 && scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({ y: 0, animated: true });
+      }
+    };
 
-        const results = res.data.results || [];
-        lastSearchRef.current = { query: text, results, page: activePage, hasNextPage: res.data.hasNextPage };
-        setAnime(results);
-        setSearchHasNext(res.data.hasNextPage);
-        setSearchPage(activePage);
-        setSuggestions([]);
-        setShowSuggestions(false);
-        if (activePage === 1 && scrollViewRef.current) {
-          scrollViewRef.current.scrollTo({ y: 0, animated: true });
+    try {
+      const cached = await AsyncStorage.getItem(storageKey);
+      if (cached) {
+        const saved = JSON.parse(cached);
+        if (saved?.ts && Date.now() - saved.ts < 10 * 60_000) {
+          applyResults(saved.data);
         }
-      })
-      .catch((err) => {
-        if (err?.code !== "ERR_CANCELED" && err?.name !== "CanceledError") setError("Search failed");
-      })
-      .finally(() => setSearchLoading(false));
+      }
+
+      const res = await API.get("/api/anime/search", {
+        params: {
+          q: text,
+          page: activePage,
+          email: user?.email || "",
+        },
+        signal: searchAbortRef.current.signal,
+      });
+      applyResults(res.data);
+      AsyncStorage.setItem(storageKey, JSON.stringify({ data: res.data, ts: Date.now() })).catch(() => {});
+    } catch (err) {
+      if (err?.code !== "ERR_CANCELED" && err?.name !== "CanceledError") {
+        const cached = await AsyncStorage.getItem(storageKey).catch(() => null);
+        if (cached) {
+          const saved = JSON.parse(cached);
+          if (saved?.data) {
+            applyResults(saved.data);
+            return;
+          }
+        }
+        setError("Search failed");
+      }
+    } finally {
+      setSearchLoading(false);
+    }
   }, [user?.email]);
 
   useEffect(() => {
@@ -944,7 +1020,7 @@ export default function HomeScreen({ navigation }) {
   ), [handleSuggestionSelect, query]);
 
   const suggestionKeyExtractor = useCallback(
-    (item, index) => `suggestion-${item.slug || item.id || item.title || index}`,
+    (item, index) => getUniqueAnimeKey("suggestion", item, index),
     []
   );
 
@@ -1248,7 +1324,7 @@ export default function HomeScreen({ navigation }) {
 
       {/* ── MOBILE SEARCH DROPDOWN (MOVED OUTSIDE NAVBAR FOR TOUCH FIX) ── */}
       {width < 768 && mobileSearchOpen && (
-        <View style={[styles.mobileMenuDropdown, { top: 86 + insets.top, zIndex: 1100, elevation: 10, position: 'absolute' }]}>
+        <View style={[styles.mobileMenuDropdown, { top: 74 + insets.top, zIndex: 1100, elevation: 10, position: 'absolute' }]}>
           <View style={styles.searchContainer}>
             <Animated.View style={[
               styles.searchWrapper,
@@ -1353,8 +1429,8 @@ export default function HomeScreen({ navigation }) {
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: 100 + insets.top,
-          paddingBottom: (width < 768 ? 110 : 24) + insets.bottom,
+          paddingTop: 84 + insets.top,
+          paddingBottom: (width < 768 ? 92 : 24) + insets.bottom,
           flexGrow: 1
         }}
         onScroll={Animated.event(
@@ -1540,6 +1616,12 @@ export default function HomeScreen({ navigation }) {
         {/* ── SECTIONS / SKELETON ── */}
         {sectionsLoading ? (
           <>
+            {serverWaking && (
+              <View style={styles.wakeNotice}>
+                <DotCircleLoader size={18} color={C.crimson} />
+                <Text style={styles.wakeNoticeText}>Server is waking up. Saved data will appear when available.</Text>
+              </View>
+            )}
             <SkeletonSection title="Recent Episodes" cardWidth={gridCardWidth} cardHeight={gridCardHeight} shimmerX={shimmerX} count={5} />
             <SkeletonSection title="Ongoing Series" cardWidth={gridCardWidth} cardHeight={gridCardHeight} shimmerX={shimmerX} count={5} />
             <SkeletonSection title="Trending" cardWidth={gridCardWidth} cardHeight={gridCardHeight} shimmerX={shimmerX} count={5} />
@@ -1557,7 +1639,7 @@ export default function HomeScreen({ navigation }) {
             <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 16, columnGap: gridGap, rowGap: 4 }}>
               {anime.map((item, index) => (
                 <AnimeCard
-                  key={`search-${item.slug || item.id || index}`}
+                  key={getUniqueAnimeKey("search", item, index)}
                   item={item}
                   cardWidth={gridCardWidth}
                   cardHeight={gridCardHeight}
@@ -1853,7 +1935,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: Platform.OS === "ios" ? 10 : 6,
   },
   logoRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -2059,6 +2141,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
   },
   retryText: { color: C.white, fontWeight: "700", fontSize: 13 },
+  wakeNotice: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(220,20,60,0.18)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  wakeNoticeText: { color: C.dim, fontSize: 13, flex: 1, lineHeight: 18 },
 
   noResults: { padding: 60, alignItems: "center", gap: 8 },
   noResultsIcon: {

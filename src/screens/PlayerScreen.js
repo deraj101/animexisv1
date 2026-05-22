@@ -962,7 +962,7 @@ export default function PlayerScreen({ route, navigation }) {
               })
             }}
             style={styles.video}
-            useNativeControls={false}
+            useNativeControls
             resizeMode="contain"
             onLoad={() => setPlayerLoading(false)}
             onPlaybackStatusUpdate={(status) => {

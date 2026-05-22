@@ -138,8 +138,8 @@ function MainTabs() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isMobile = width < 768;
-  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 18 : 8);
-  const tabBarHeight = Platform.OS === 'ios' ? 84 + bottomInset : 80 + bottomInset;
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 6);
+  const tabBarHeight = Platform.OS === 'ios' ? 72 + bottomInset : 66 + bottomInset;
 
   return (
     <Tab.Navigator
@@ -161,18 +161,18 @@ function MainTabs() {
           fontSize: 11,
           lineHeight: 16,
           fontWeight: '700',
-          marginTop: 3,
-          marginBottom: Platform.OS === 'ios' ? 2 : 4,
+          marginTop: 1,
+          marginBottom: Platform.OS === 'ios' ? 0 : 2,
           includeFontPadding: false,
           textAlign: 'center',
         },
         tabBarIconStyle: {
-          marginTop: 4,
-          marginBottom: 1,
+          marginTop: 2,
+          marginBottom: 0,
         },
         tabBarItemStyle: {
-          paddingTop: 4,
-          paddingBottom: 4,
+          paddingTop: 2,
+          paddingBottom: 2,
           justifyContent: 'center',
           alignItems: 'center',
         },
@@ -184,7 +184,7 @@ function MainTabs() {
           elevation: 0,
           height: tabBarHeight,
           paddingBottom: bottomInset,
-          paddingTop: 8,
+          paddingTop: 4,
         } : { display: 'none' },
         tabBarBackground: () => (
           isMobile ? <BlurView tint="dark" intensity={80} style={StyleSheet.absoluteFill} /> : null

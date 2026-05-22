@@ -805,21 +805,6 @@ export default function ProfileScreen({ navigation }) {
 
           </Animated.View>
 
-          {/* SECURITY & LAB DOCS */}
-          <Animated.View style={{ opacity: menuAnim }}>
-            <Section title="Academic Defense">
-              <View style={styles.menuCard}>
-                <MenuRow 
-                  icon="shield-checkmark-outline" 
-                  label="Security & PC3211 Lab" 
-                  sub="PC3211 Rubrics & Live Sandbox Proof" 
-                  onPress={() => navigation.navigate("SecurityDocs")} 
-                  last 
-                />
-              </View>
-            </Section>
-          </Animated.View>
-
           {/* ACCOUNT */}
 
           <Animated.View style={{ opacity: menuAnim }}>
@@ -949,11 +934,11 @@ const styles = StyleSheet.create({
 
   stickyNav: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 100, overflow: "hidden" },
   stickyNavLine: { position: "absolute", bottom: 0, left: 0, right: 0, height: 1, backgroundColor: C.glass, opacity: 1 },
-  stickyNavContent: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: Platform.OS === "ios" ? 54 : 42, paddingBottom: 12, paddingHorizontal: 16 },
+  stickyNavContent: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: Platform.OS === "ios" ? 46 : 34, paddingBottom: 8, paddingHorizontal: 16 },
   stickyNavTitle: { color: C.white, fontSize: 16, fontWeight: "700", letterSpacing: -0.2 },
   backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.3)", borderWidth: 1, borderColor: C.border, justifyContent: "center", alignItems: "center" },
 
-  floatBack: { position: "absolute", top: Platform.OS === "ios" ? 56 : 44, left: 16, zIndex: 101 },
+  floatBack: { position: "absolute", top: Platform.OS === "ios" ? 48 : 36, left: 16, zIndex: 101 },
   floatBackBtn: { borderRadius: 12, overflow: "hidden" },
   floatBackBlur: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
 

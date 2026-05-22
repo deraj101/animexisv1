@@ -13,6 +13,7 @@ import {
   Modal,
 } from "react-native";
 import { Image } from "expo-image";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
@@ -37,6 +38,8 @@ const SHIMMER_COLORS = [
   "rgba(255,255,255,0.00)",
 ];
 const SHIMMER_LOCATIONS = [0, 0.2, 0.5, 0.8, 1];
+const DETAILS_CACHE_TTL_MS = 24 * 60 * 60_000;
+const DETAILS_CACHE_PREFIX = "details_cache:";
 
 function SkeletonDetails({ shimmerX, width }) {
   const translateX = shimmerX.interpolate({
@@ -323,12 +326,26 @@ export default function DetailsScreen({ route, navigation }) {
   const fetchAnimeDetails = async () => {
     setLoading(true);
     setError(null);
+    const cacheKey = `${DETAILS_CACHE_PREFIX}${id}`;
+    const applyDetails = (data) => {
+      setAnime(data);
+      setEpisodes(data.episodes || []);
+      animateIn();
+    };
     try {
+      const cached = await AsyncStorage.getItem(cacheKey);
+      if (cached) {
+        const saved = JSON.parse(cached);
+        if (saved?.ts && Date.now() - saved.ts < DETAILS_CACHE_TTL_MS && saved.data?.success) {
+          applyDetails(saved.data);
+          setLoading(false);
+        }
+      }
+
       const res = await API.get(`/api/anime/details/${id}`);
       if (res.data.success) {
-        setAnime(res.data);
-        setEpisodes(res.data.episodes || []);
-        animateIn();
+        applyDetails(res.data);
+        AsyncStorage.setItem(cacheKey, JSON.stringify({ data: res.data, ts: Date.now() })).catch(() => {});
         
         // Fetch Live Global Rating right after rendering starts so cache doesn't block it
         API.get(`/api/anime/details/${id}/rating`).then(ratingRes => {
@@ -369,7 +386,17 @@ export default function DetailsScreen({ route, navigation }) {
         setError(res.data.error || "Failed to load anime details");
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to load anime details");
+      const cached = await AsyncStorage.getItem(cacheKey).catch(() => null);
+      if (cached) {
+        const saved = JSON.parse(cached);
+        if (saved?.data?.success) {
+          applyDetails(saved.data);
+        } else {
+          setError(err.response?.data?.error || "Failed to load anime details");
+        }
+      } else {
+        setError(err.response?.data?.error || "Failed to load anime details");
+      }
     }
     setLoading(false);
   };

@@ -257,7 +257,7 @@ export default function ExploreScreen({ navigation }) {
       <StatusBar style="light" />
 
       {/* ── Fixed Header ── */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <LinearGradient
           colors={["rgba(8,8,9,0.98)", "rgba(8,8,9,0.85)", "rgba(8,8,9,0)"]}
           style={StyleSheet.absoluteFill}
@@ -272,8 +272,8 @@ export default function ExploreScreen({ navigation }) {
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingTop: 70 + insets.top,
-          paddingBottom: isMobile ? 110 + insets.bottom : 40,
+          paddingTop: 60 + insets.top,
+          paddingBottom: isMobile ? 92 + insets.bottom : 40,
         }}
         showsVerticalScrollIndicator={false}
       >
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 100,
     paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingBottom: 10,
   },
   headerContent: {
     flexDirection: "row",
