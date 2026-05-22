@@ -234,8 +234,6 @@ export default function DetailsScreen({ route, navigation }) {
   const [episodeProgress, setEpisodeProgress] = useState(null); // { episode_number, progress, duration }
 
   const shimmerX = useRef(new Animated.Value(0)).current;
-  const prefetchedEpisodeUrlsRef = useRef(new Set());
-
   useEffect(() => {
     Animated.loop(
       Animated.timing(shimmerX, {
@@ -268,22 +266,6 @@ export default function DetailsScreen({ route, navigation }) {
     const found = episodeRanges.find(r => r.index === activeRange) || episodeRanges[0];
     return isReversed ? [...found.data].reverse() : found.data;
   }, [episodeRanges, activeRange, isReversed]);
-
-  useEffect(() => {
-    if (user?.subscription?.toLowerCase() !== 'premium' || activeRangeData.length === 0) return;
-
-    const timer = setTimeout(() => {
-      activeRangeData.slice(0, 4).forEach((episode, index) => {
-        if (!episode.url || prefetchedEpisodeUrlsRef.current.has(episode.url)) return;
-        prefetchedEpisodeUrlsRef.current.add(episode.url);
-        setTimeout(() => {
-          API.get(`/api/anime/episode-info?url=${encodeURIComponent(episode.url)}`).catch(() => {});
-        }, index * 1200);
-      });
-    }, 800);
-
-    return () => clearTimeout(timer);
-  }, [activeRangeData, user?.subscription]);
 
   const fadeIn  = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(30)).current;

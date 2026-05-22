@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { View, ActivityIndicator, LogBox, useWindowDimensions, StyleSheet, Platform } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -43,6 +43,7 @@ import LibraryScreen from "./src/screens/LibraryScreen";
 
 const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const navigationRef = createNavigationContainerRef();
 
 // Shared sub-screen definitions used inside every tab stack
 const SHARED_SCREENS = [
@@ -246,8 +247,21 @@ function AppNavigator() {
     const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.animeId) {
-        // Navigate into the Home tab's Details screen
-        // The user will see it from whichever tab they're on
+        const params = {
+          id: String(data.animeId),
+          title: data.title,
+          episodeNum: data.episodeNum,
+        };
+
+        if (navigationRef.isReady()) {
+          navigationRef.navigate("MainTabs", {
+            screen: "HomeTab",
+            params: {
+              screen: "Details",
+              params,
+            },
+          });
+        }
       }
     });
 
@@ -347,7 +361,7 @@ function AppContent({ linking }) {
   return (
     <View style={{ flex: 1, backgroundColor: '#080809', alignItems: 'stretch' }}>
       <View style={{ flex: 1, width: '100%', overflow: 'hidden' }}>
-        <NavigationContainer linking={linking}>
+        <NavigationContainer ref={navigationRef} linking={linking}>
           <AppNavigator />
         </NavigationContainer>
       </View>

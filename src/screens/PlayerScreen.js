@@ -61,6 +61,8 @@ const ADS = [
     label: "Ad · animexis.com",
   },
 ];
+const DOWNLOADS_ENABLED = process.env.EXPO_PUBLIC_ENABLE_DOWNLOADS !== 'false';
+const VIDEO_PROXY_ENABLED = process.env.EXPO_PUBLIC_USE_VIDEO_PROXY === 'true';
 
 // ─── FORMAT TIME ─────────────────────────────────────────────────────────────
 const fmtTime = (secs) => {
@@ -321,6 +323,11 @@ export default function PlayerScreen({ route, navigation }) {
   }, [animeId]);
 
   const handleDownloadEpisode = async (episodeNum, episodeUrl) => {
+    if (!DOWNLOADS_ENABLED) {
+      Alert.alert("Downloads Paused", "Offline downloads are temporarily disabled to keep the free server stable.");
+      return;
+    }
+
     if (user?.subscription?.toLowerCase() !== 'premium') {
       Alert.alert("Premium Only", "Offline downloads are exclusive to Premium members. Upgrade to unlock!");
       return;
@@ -530,7 +537,7 @@ export default function PlayerScreen({ route, navigation }) {
   };
 
   const buildStreamUrl = (rawUrl) => {
-    if (Platform.OS === "web") {
+    if (Platform.OS === "web" && VIDEO_PROXY_ENABLED) {
       return `${process.env.EXPO_PUBLIC_API_URL}/api/anime/stream?url=${encodeURIComponent(rawUrl)}&token=${user?.token || ''}`;
     }
     return rawUrl;
@@ -846,6 +853,7 @@ export default function PlayerScreen({ route, navigation }) {
   };
 
   const renderDownloadSection = () => {
+    if (!DOWNLOADS_ENABLED) return null;
     if (isOffline) return null;
 
     const isDownloaded = !!downloadedEps[currentEpisodeNumber];

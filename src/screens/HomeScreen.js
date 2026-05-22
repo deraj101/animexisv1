@@ -750,21 +750,35 @@ export default function HomeScreen({ navigation }) {
       setError(null);
       const homeRes = await cachedGet("/api/anime/home", 15 * 60_000).catch(() => null);
       const home = homeRes?.data?.success ? homeRes.data : null;
-      const recentRes = home ? { data: home.recent } : null;
-      const popularRes = home ? { data: home.popular } : null;
-      const spotlightRes = home ? { data: home.spotlight } : null;
-      const ongoingRes = home ? { data: home.ongoing } : null;
-      const scheduleRes = home ? { data: home.schedule } : null;
 
-      if (recentRes?.data?.success && recentRes.data.episodes) setRecent(recentRes.data.episodes);
-      if (ongoingRes?.data?.success && ongoingRes.data.series) setOngoing(ongoingRes.data.series);
-      if (popularRes?.data?.success && popularRes.data.results) setTrending(popularRes.data.results);
-      if (scheduleRes?.data?.success && scheduleRes.data.results) setSchedule(scheduleRes.data.results);
-      if (spotlightRes?.data?.success && spotlightRes.data.results) {
-        console.log("[HomeScreen] Spotlight data count:", spotlightRes.data.results.length);
-        setSpotlight(spotlightRes.data.results);
-      } else {
-        console.log("[HomeScreen] Spotlight fetch failed or empty:", spotlightRes?.data);
+      let recentData = home?.recent;
+      let popularData = home?.popular;
+      let spotlightData = home?.spotlight;
+      let ongoingData = home?.ongoing;
+      let scheduleData = home?.schedule;
+
+      if (!home || !recentData?.episodes || !popularData?.results || !spotlightData?.results || !ongoingData?.series || !scheduleData?.results) {
+        const [recentRes, popularRes, spotlightRes, ongoingRes, scheduleRes] = await Promise.all([
+          recentData?.episodes ? null : cachedGet("/api/anime/recent?page=1", 15 * 60_000).catch(() => null),
+          popularData?.results ? null : cachedGet("/api/anime/popular?page=1", 12 * 60 * 60_000).catch(() => null),
+          spotlightData?.results ? null : cachedGet("/api/anime/spotlight", 60 * 60_000).catch(() => null),
+          ongoingData?.series ? null : cachedGet("/api/anime/ongoing?page=1", 6 * 60 * 60_000).catch(() => null),
+          scheduleData?.results ? null : cachedGet("/api/anime/schedule", 6 * 60 * 60_000).catch(() => null),
+        ]);
+
+        recentData = recentData?.episodes ? recentData : recentRes?.data;
+        popularData = popularData?.results ? popularData : popularRes?.data;
+        spotlightData = spotlightData?.results ? spotlightData : spotlightRes?.data;
+        ongoingData = ongoingData?.series ? ongoingData : ongoingRes?.data;
+        scheduleData = scheduleData?.results ? scheduleData : scheduleRes?.data;
+      }
+
+      if (recentData?.success && Array.isArray(recentData.episodes)) setRecent(recentData.episodes);
+      if (ongoingData?.success && Array.isArray(ongoingData.series)) setOngoing(ongoingData.series);
+      if (popularData?.success && Array.isArray(popularData.results)) setTrending(popularData.results);
+      if (scheduleData?.success && Array.isArray(scheduleData.results)) setSchedule(scheduleData.results);
+      if (spotlightData?.success && Array.isArray(spotlightData.results)) {
+        setSpotlight(spotlightData.results);
       }
 
     } catch {
@@ -1698,7 +1712,7 @@ export default function HomeScreen({ navigation }) {
               )}
             </View>
           </View>
-        ) : recent.length > 0 || trending.length > 0 || continueWatching.length > 0 ? (
+        ) : recent.length > 0 || trending.length > 0 || ongoing.length > 0 || schedule.length > 0 || continueWatching.length > 0 ? (
           <>
             {continueWatching.length > 0 && anime.length === 0 && (
               <Section

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,14 @@ import { C } from '../theme';
 import * as NotificationApi from '../services/notificationApi';
 import API from '../services/api';
 import { SkeletonList } from '../components/SkeletonGrid';
+
+const getEpisodeNumber = (episode) => (
+  episode?.number ?? episode?.episodeNumber ?? episode?.displayNumber
+);
+
+const isSameEpisode = (episode, episodeNum) => (
+  String(getEpisodeNumber(episode)) === String(episodeNum)
+);
 
 const NotificationItem = ({ item, onPress }) => {
   const getIcon = () => {
@@ -87,8 +95,13 @@ export default function NotificationsScreen({ navigation }) {
     const isCommentAction = item.type === 'LIKE' || item.type === 'REPLY';
 
     // 2. Navigate based on type
-    if (item.type === 'SUPPORT_REPLY') {
+    if (item.type === 'SUPPORT_REPLY' || item.type === 'SYSTEM') {
       Alert.alert(item.title, item.message);
+      return;
+    }
+
+    if (!item.refId) {
+      Alert.alert(item.title || 'Notification', item.message || 'No destination is attached to this notification.');
       return;
     }
 
@@ -97,25 +110,28 @@ export default function NotificationsScreen({ navigation }) {
       try {
         setLoading(true);
         const detailsRes = await API.get(`/api/anime/details/${item.refId}`);
-        const episode = detailsRes.data.episodes?.find(e => String(e.episodeNumber) === String(item.episodeNum));
+        const animeDetails = detailsRes.data;
+        const episode = animeDetails.episodes?.find(e => isSameEpisode(e, item.episodeNum));
         
         if (episode?.url) {
           const infoRes = await API.get(`/api/anime/episode-info?url=${encodeURIComponent(episode.url)}`);
+          const episodeNumber = getEpisodeNumber(episode) || item.episodeNum;
           navigation.navigate("Player", {
             video: episode.url,
-            title: `Episode ${item.episodeNum}`,
-            animeTitle: detailsRes.data.title,
-            episodeNumber: item.episodeNum,
+            title: episode.title ? `Ep ${episodeNumber}: ${episode.title}` : `Episode ${episodeNumber}`,
+            animeTitle: animeDetails.title,
+            episodeNumber,
+            episodeTitle: episode.title,
             episodeData: infoRes.data,
             animeId: item.refId,
-            animeImage: detailsRes.data.image,
+            animeImage: animeDetails.image,
             scrollToComments: isCommentAction
           });
         } else {
             // Fallback to details if episode not found
             navigation.navigate("Details", { id: item.refId, scrollToComments: isCommentAction });
         }
-      } catch (err) {
+      } catch {
         navigation.navigate("Details", { id: item.refId, scrollToComments: isCommentAction });
       } finally {
         setLoading(false);
