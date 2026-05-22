@@ -1,9 +1,9 @@
 import React, { useEffect } from "react";
-import { View, ActivityIndicator, LogBox, useWindowDimensions, StyleSheet } from "react-native";
+import { View, ActivityIndicator, LogBox, useWindowDimensions, StyleSheet, Platform } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 
@@ -12,7 +12,6 @@ import API from "./src/services/api";
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import { Platform } from "react-native";
 import { Analytics } from "@vercel/analytics/react";
 
 import LandingScreen from "./src/screens/LandingScreen";
@@ -137,7 +136,10 @@ function ProfileStack() {
 // ── Bottom Tab Navigator ─────────────────────────────────────────────────────
 function MainTabs() {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isMobile = width < 768;
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 18 : 8);
+  const tabBarHeight = Platform.OS === 'ios' ? 84 + bottomInset : 80 + bottomInset;
 
   return (
     <Tab.Navigator
@@ -153,14 +155,26 @@ function MainTabs() {
         },
         tabBarActiveTintColor: '#DC143C',
         tabBarInactiveTintColor: 'rgba(255,255,255,0.5)',
+        tabBarShowLabel: true,
+        tabBarAllowFontScaling: false,
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
-          marginTop: -2,
-          marginBottom: Platform.OS === 'ios' ? 0 : 4,
+          lineHeight: 16,
+          fontWeight: '700',
+          marginTop: 3,
+          marginBottom: Platform.OS === 'ios' ? 2 : 4,
+          includeFontPadding: false,
+          textAlign: 'center',
         },
         tabBarIconStyle: {
           marginTop: 4,
+          marginBottom: 1,
+        },
+        tabBarItemStyle: {
+          paddingTop: 4,
+          paddingBottom: 4,
+          justifyContent: 'center',
+          alignItems: 'center',
         },
         tabBarStyle: isMobile ? {
           position: 'absolute',
@@ -168,8 +182,8 @@ function MainTabs() {
           borderTopWidth: 1,
           borderTopColor: 'rgba(255,255,255,0.05)',
           elevation: 0,
-          height: Platform.OS === 'ios' ? 92 : 72,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+          height: tabBarHeight,
+          paddingBottom: bottomInset,
           paddingTop: 8,
         } : { display: 'none' },
         tabBarBackground: () => (
@@ -187,7 +201,7 @@ function MainTabs() {
 
 // ── Root Navigator ───────────────────────────────────────────────────────────
 function AppNavigator() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     // Silently log app visit for analytics
@@ -319,7 +333,6 @@ async function registerForPushNotificationsAsync() {
 
 function AppContent({ linking }) {
   const { loading } = useAuth();
-  const { width } = useWindowDimensions();
 
   if (loading) {
     return (

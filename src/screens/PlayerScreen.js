@@ -276,42 +276,6 @@ function AdOverlay({ onAdFinished }) {
 
 // ─── PLAYER CONTROLS OVERLAY ─────────────────────────────────────────────────
 // Fades in on tap, auto-hides after AUTO_HIDE_MS of inactivity.
-const AUTO_HIDE_MS = 3000;
-
-function PlayerControls({
-  visible, title, onClose, onOpenBrowser, controlsAnim,
-}) {
-  return (
-    <Animated.View
-      style={[styles.controlsOverlay, { opacity: controlsAnim, pointerEvents: visible ? "box-none" : "none" }]}
-    >
-      {/* Top gradient + title bar */}
-      <LinearGradient
-        colors={["rgba(0,0,0,0.78)", "transparent"]}
-        style={styles.controlsTop}
-      >
-        <Text style={styles.controlsTitle} numberOfLines={1}>{title}</Text>
-        <View style={styles.controlsTopRight}>
-          <TouchableOpacity onPress={onOpenBrowser} style={styles.controlBtn}>
-            <Ionicons name="open-outline" size={17} color="rgba(255,255,255,0.8)" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={[styles.controlBtn, styles.controlBtnClose]}>
-            <Ionicons name="close" size={19} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-
-      {/* Centre play/pause hint (just a visual cue) */}
-      <View style={[styles.controlsCenter, { pointerEvents: "none" }]}>
-        <View style={styles.controlsCenterIcon}>
-          <Ionicons name="pause" size={28} color="rgba(255,255,255,0.5)" />
-        </View>
-      </View>
-
-    </Animated.View>
-  );
-}
-
 // ─── PLAYER SCREEN ────────────────────────────────────────────────────────────
 export default function PlayerScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
@@ -341,9 +305,6 @@ export default function PlayerScreen({ route, navigation }) {
   const [useWebView, setUseWebView] = useState(false);
   const [error, setError] = useState(null);
   const [showAd, setShowAd] = useState(user?.subscription?.toLowerCase() !== 'premium');
-  // Controls visibility state
-  const [controlsVisible, setControlsVisible] = useState(false);
-
   const [downloadedEps, setDownloadedEps] = useState({});
   const [downloadingEps, setDownloadingEps] = useState({});
 
@@ -434,8 +395,6 @@ export default function PlayerScreen({ route, navigation }) {
   const videoRef = useRef(null);
   const cardAnim = useRef(new Animated.Value(0)).current;
   const cardScale = useRef(new Animated.Value(0.93)).current;
-  const controlsAnim = useRef(new Animated.Value(0)).current;
-  const hideTimerRef = useRef(null);
   const watchStartRef = useRef(null);
   const totalWatchTimeRef = useRef(0);
   const lastPlayStartRef = useRef(null);
@@ -445,37 +404,6 @@ export default function PlayerScreen({ route, navigation }) {
   const lastSyncRef = useRef(0); // timestamp of last progress sync
 
   // ── Controls: show → fade in + start auto-hide timer ──────────────────────
-  const showControls = useCallback(() => {
-    setControlsVisible(true);
-    Animated.timing(controlsAnim, {
-      toValue: 1, duration: 220, useNativeDriver: true,
-    }).start();
-    // Reset the auto-hide timer on every interaction
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => {
-      Animated.timing(controlsAnim, {
-        toValue: 0, duration: 300, useNativeDriver: true,
-      }).start(() => setControlsVisible(false));
-    }, AUTO_HIDE_MS);
-  }, []);
-
-  const hideControls = useCallback(() => {
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    Animated.timing(controlsAnim, {
-      toValue: 0, duration: 220, useNativeDriver: true,
-    }).start(() => setControlsVisible(false));
-  }, []);
-
-  const toggleControls = useCallback(() => {
-    if (controlsVisible) hideControls();
-    else showControls();
-  }, [controlsVisible, showControls, hideControls]);
-
-  // Cleanup timer on unmount
-  useEffect(() => () => {
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-  }, []);
-
   useEffect(() => {
     if (!showAd && !watchStartRef.current) {
       watchStartRef.current = Date.now();
@@ -545,13 +473,12 @@ export default function PlayerScreen({ route, navigation }) {
       Animated.spring(cardScale, { toValue: 1, tension: 75, friction: 11, useNativeDriver: true })
     ]).start();
     pickAndLoadSource();
-    // Show controls initially for 3s so user sees title & close button
-    showControls();
   }, []);
 
   const [showComments, setShowComments] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const [hoveredBtn, setHoveredBtn] = useState(null);
+  const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
 
   const fetchCommentCount = useCallback(async () => {
     try {
@@ -751,6 +678,7 @@ export default function PlayerScreen({ route, navigation }) {
   const handleSourceSelect = (src) => {
     setPlayerLoading(true);
     setError(null);
+    setSourceMenuOpen(false);
     if (src.isIframe) {
       setSelectedSourceLabel(src.label);
       setUseWebView(true);
@@ -873,25 +801,46 @@ export default function PlayerScreen({ route, navigation }) {
 
   const renderSourceSelector = () => {
     if (availableSources.length <= 1) return null;
+    const selectedSource = availableSources.find((src, idx) => (
+      selectedSourceLabel === src.label || (selectedSourceLabel === "Auto" && idx === 0)
+    )) || availableSources[0];
+
     return (
       <View style={styles.sourceSelectorContainer}>
-        <Text style={styles.sourceSelectorLabel}>Server:</Text>
-        <View style={styles.sourceWrap}>
-          {availableSources.map((src, idx) => {
-            const isActive = selectedSourceLabel === src.label || (selectedSourceLabel === "Auto" && idx === 0);
-            return (
-              <TouchableOpacity
-                key={idx}
-                style={[styles.sourceBtn, isActive && styles.sourceBtnActive]}
-                onPress={() => handleSourceSelect(src)}
-              >
-                <Text style={[styles.sourceBtnText, isActive && styles.sourceBtnTextActive]}>
-                  {src.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <TouchableOpacity
+          style={styles.sourceDropdownButton}
+          activeOpacity={0.82}
+          onPress={() => setSourceMenuOpen((open) => !open)}
+        >
+          <View style={styles.sourceDropdownTextWrap}>
+            <Text style={styles.sourceSelectorLabel}>Select Server</Text>
+            <Text style={styles.sourceDropdownValue} numberOfLines={1}>
+              {selectedSource?.label || "Auto"}
+            </Text>
+          </View>
+          <Ionicons name={sourceMenuOpen ? "chevron-up" : "chevron-down"} size={18} color="#fff" />
+        </TouchableOpacity>
+
+        {sourceMenuOpen && (
+          <View style={styles.sourceDropdownMenu}>
+            {availableSources.map((src, idx) => {
+              const isActive = selectedSource?.url === src.url && selectedSource?.label === src.label;
+              return (
+                <TouchableOpacity
+                  key={`${src.label}-${idx}`}
+                  style={[styles.sourceDropdownItem, isActive && styles.sourceDropdownItemActive]}
+                  onPress={() => handleSourceSelect(src)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.sourceDropdownItemText, isActive && styles.sourceDropdownItemTextActive]} numberOfLines={1}>
+                    {src.label}
+                  </Text>
+                  {isActive && <Ionicons name="checkmark" size={16} color="#facc15" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </View>
     );
   };
@@ -904,30 +853,26 @@ export default function PlayerScreen({ route, navigation }) {
     const isDownloading = downloadProgress !== undefined;
 
     return (
-      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
-        <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: "600", marginRight: 12 }}>
-          Offline:
-        </Text>
-        
+      <View style={styles.downloadContainer}>
         {isDownloaded ? (
-          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(16,185,129,0.12)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(16,185,129,0.3)" }}>
+          <View style={[styles.downloadButton, styles.downloadButtonDone]}>
             <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-            <Text style={{ color: "#10b981", fontSize: 13, fontWeight: "600", marginLeft: 6 }}>Downloaded</Text>
+            <Text style={[styles.downloadButtonText, { color: "#10b981" }]}>Downloaded</Text>
           </View>
         ) : isDownloading ? (
-          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(250,204,21,0.12)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(250,204,21,0.3)" }}>
+          <View style={[styles.downloadButton, styles.downloadButtonBusy]}>
             <Ionicons name="cloud-download" size={16} color="#facc15" />
-            <Text style={{ color: "#facc15", fontSize: 13, fontWeight: "600", marginLeft: 6 }}>
+            <Text style={[styles.downloadButtonText, { color: "#facc15" }]}>
               Downloading {Math.round(downloadProgress * 100)}%
             </Text>
           </View>
         ) : (
           <TouchableOpacity 
-            style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.04)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }}
+            style={styles.downloadButton}
             onPress={() => handleDownloadEpisode(currentEpisodeNumber, currentEpisodeUrl)}
           >
             <Ionicons name="cloud-download-outline" size={16} color="#fff" />
-            <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600", marginLeft: 6 }}>Download</Text>
+            <Text style={styles.downloadButtonText}>Download</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -935,6 +880,13 @@ export default function PlayerScreen({ route, navigation }) {
   };
 
   // ── Player body ───────────────────────────────────────────────────────────────
+  const renderPlaybackActions = () => (
+    <View style={styles.playbackActionsRow}>
+      {renderSourceSelector()}
+      {renderDownloadSection()}
+    </View>
+  );
+
   const renderPlayerBody = () => {
     if (error) {
       return (
@@ -961,12 +913,9 @@ export default function PlayerScreen({ route, navigation }) {
 
 
     return (
-      // Tap anywhere on the player to toggle controls
-      <TouchableOpacity
+      <View
         style={[styles.playerArea, { opacity: showAd ? 0.01 : 1 }]}
-        activeOpacity={1}
-        onPress={toggleControls}
-        disabled={showAd}
+        accessibilityLabel={headerTitle}
       >
         {playerLoading && (
           <View style={styles.loadingOverlay}>
@@ -1013,7 +962,7 @@ export default function PlayerScreen({ route, navigation }) {
               })
             }}
             style={styles.video}
-            useNativeControls
+            useNativeControls={false}
             resizeMode="contain"
             onLoad={() => setPlayerLoading(false)}
             onPlaybackStatusUpdate={(status) => {
@@ -1078,14 +1027,7 @@ export default function PlayerScreen({ route, navigation }) {
         )}
 
         {/* ── Animated controls overlay ── */}
-        <PlayerControls
-          visible={controlsVisible}
-          title={headerTitle}
-          onClose={goBack}
-          onOpenBrowser={openInBrowser}
-          controlsAnim={controlsAnim}
-        />
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -1150,8 +1092,7 @@ export default function PlayerScreen({ route, navigation }) {
               {showAd && <AdOverlay onAdFinished={handleAdFinished} />}
             </Animated.View>
             <View style={styles.metaCard}>
-              {renderSourceSelector()}
-              {renderDownloadSection()}
+              {renderPlaybackActions()}
             </View>
           </ScrollView>
 
@@ -1231,8 +1172,7 @@ export default function PlayerScreen({ route, navigation }) {
 
           {/* Anime Info details block */}
           <View style={styles.mobileMetaCard}>
-            {renderSourceSelector()}
-            {renderDownloadSection()}
+            {renderPlaybackActions()}
           </View>
 
           {/* Dynamic tabs selector inside mobile page flow */}
@@ -1403,45 +1343,112 @@ const styles = StyleSheet.create({
     padding: 20,
     marginTop: 20,
   },
-  sourceSelectorContainer: {
+  playbackActionsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.05)",
+    alignItems: "flex-start",
+    gap: 10,
+    zIndex: 20,
+  },
+  sourceSelectorContainer: {
+    flex: 1,
+    minWidth: 0,
+    position: "relative",
+    zIndex: 30,
   },
   sourceSelectorLabel: {
     color: "rgba(255,255,255,0.5)",
-    fontSize: 13,
-    fontWeight: "600",
-    marginRight: 12,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
-  sourceWrap: {
-    flex: 1,
+  sourceDropdownButton: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  sourceBtn: {
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: "rgba(255,255,255,0.04)",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    minHeight: 46,
+  },
+  sourceDropdownTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 10,
+  },
+  sourceDropdownValue: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  sourceDropdownMenu: {
+    position: "absolute",
+    top: 52,
+    left: 0,
+    right: 0,
+    backgroundColor: "#151515",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    overflow: "hidden",
+    zIndex: 40,
+    elevation: 10,
+  },
+  sourceDropdownItem: {
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  sourceDropdownItemActive: {
+    backgroundColor: "rgba(250,204,21,0.1)",
+  },
+  sourceDropdownItemText: {
+    flex: 1,
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 13,
+    fontWeight: "600",
+    marginRight: 8,
+  },
+  sourceDropdownItemTextActive: {
+    color: "#facc15",
+  },
+  downloadContainer: {
+    flexShrink: 0,
+  },
+  downloadButton: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
-  sourceBtnActive: {
-    backgroundColor: "rgba(250,204,21,0.15)",
-    borderColor: "#facc15",
+  downloadButtonDone: {
+    backgroundColor: "rgba(16,185,129,0.12)",
+    borderColor: "rgba(16,185,129,0.3)",
   },
-  sourceBtnText: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 12,
-    fontWeight: "600",
+  downloadButtonBusy: {
+    backgroundColor: "rgba(250,204,21,0.12)",
+    borderColor: "rgba(250,204,21,0.3)",
   },
-  sourceBtnTextActive: {
-    color: "#facc15",
+  downloadButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+    marginLeft: 6,
   },
   metaTitleRow: {
     flexDirection: "row",

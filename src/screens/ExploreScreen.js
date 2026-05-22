@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,9 +7,6 @@ import {
   ScrollView,
   FlatList,
   useWindowDimensions,
-  Animated,
-  ActivityIndicator,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -40,7 +37,8 @@ const GENRES = [
 const FORMATS = ["TV", "Movie", "OVA", "ONA", "Special", "Music"];
 const STATUSES = ["Ongoing", "Completed", "Upcoming"];
 const currentYear = new Date().getFullYear();
-const YEARS = Array.from({ length: currentYear - 2008 }, (_, i) => String(currentYear + 1 - i));
+const YEARS = Array.from({ length: currentYear - 2007 }, (_, i) => String(currentYear - i));
+const toFilterSlug = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, "-");
 
 // ─── Horizontal Filter Pills ────────────────────────────────────────────────
 function FilterPills({ options, activeValue, onSelect }) {
@@ -151,17 +149,21 @@ export default function ExploreScreen({ navigation }) {
   const [genreLoading, setGenreLoading] = useState(true);
 
   // ── Master List (for Format / Status / Year filtering) ──
-  const [masterList, setMasterList] = useState([]);
-  const [masterLoading, setMasterLoading] = useState(true);
+  const [formatAnime, setFormatAnime] = useState([]);
+  const [formatLoading, setFormatLoading] = useState(true);
 
   // ── Format State ──
   const [activeFormat, setActiveFormat] = useState("TV");
 
   // ── Status State ──
   const [activeStatus, setActiveStatus] = useState("Ongoing");
+  const [statusAnime, setStatusAnime] = useState([]);
+  const [statusLoading, setStatusLoading] = useState(true);
 
   // ── Year State ──
   const [activeYear, setActiveYear] = useState(String(currentYear));
+  const [yearAnime, setYearAnime] = useState([]);
+  const [yearLoading, setYearLoading] = useState(true);
 
   // ── Navigation helper ──
   const navigateToDetails = useCallback((item) => {
@@ -196,57 +198,59 @@ export default function ExploreScreen({ navigation }) {
   }, [activeGenre]);
 
   // ── Fetch Master List (popular anime, multiple pages) for client-side filters ──
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setMasterLoading(true);
-      try {
-        // Fetch 3 pages for a robust dataset
-        const pages = await Promise.all([
-          API.get("/api/anime/popular?page=1"),
-          API.get("/api/anime/popular?page=2"),
-          API.get("/api/anime/popular?page=3"),
-        ]);
-        const all = pages.flatMap(p => p.data.results || []);
-        // De-duplicate by slug/id
-        const seen = new Set();
-        const unique = all.filter(a => {
-          const key = a.slug || a.id;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        if (!cancelled) setMasterList(unique);
-      } catch (err) {
-        console.error("[explore] master list:", err.message);
-      } finally {
-        if (!cancelled) setMasterLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+  const fetchExploreFilter = useCallback(async (value, setData, setLoading, logKey) => {
+    if (!value) {
+      setData([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const slug = toFilterSlug(value);
+      const res = await API.get(`/api/anime/genre/${encodeURIComponent(slug)}?page=1`);
+      setData(res.data.results || []);
+    } catch (err) {
+      console.error(`[explore] ${logKey} fetch:`, err.message);
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   // ── Client-side filtered lists ──
-  const formatAnime = masterList.filter((item) => {
-    if (!activeFormat) return false;
-    const cat = (item.category || item.type || "").toLowerCase();
-    return cat.includes(activeFormat.toLowerCase());
-  });
+  useEffect(() => {
+    let active = true;
+    fetchExploreFilter(
+      activeFormat,
+      (data) => { if (active) setFormatAnime(data); },
+      (loading) => { if (active) setFormatLoading(loading); },
+      "format"
+    );
+    return () => { active = false; };
+  }, [activeFormat, fetchExploreFilter]);
 
-  const statusAnime = masterList.filter((item) => {
-    if (!activeStatus) return false;
-    const st = (item.status || "").toLowerCase();
-    if (activeStatus === "Ongoing") return st.includes("ongoing") || st.includes("airing");
-    if (activeStatus === "Completed") return st.includes("complete") || st.includes("finished");
-    if (activeStatus === "Upcoming") return st.includes("upcoming") || st.includes("not yet");
-    return false;
-  });
+  useEffect(() => {
+    let active = true;
+    fetchExploreFilter(
+      activeStatus,
+      (data) => { if (active) setStatusAnime(data); },
+      (loading) => { if (active) setStatusLoading(loading); },
+      "status"
+    );
+    return () => { active = false; };
+  }, [activeStatus, fetchExploreFilter]);
 
-  const yearAnime = masterList.filter((item) => {
-    if (!activeYear) return false;
-    const y = (item.premiered || item.seasonYear || item.releaseDate || "").toString();
-    return y.includes(activeYear);
-  });
+  useEffect(() => {
+    let active = true;
+    fetchExploreFilter(
+      activeYear,
+      (data) => { if (active) setYearAnime(data); },
+      (loading) => { if (active) setYearLoading(loading); },
+      "year"
+    );
+    return () => { active = false; };
+  }, [activeYear, fetchExploreFilter]);
 
   return (
     <View style={styles.container}>
@@ -295,7 +299,7 @@ export default function ExploreScreen({ navigation }) {
           activePill={activeFormat}
           onPillSelect={setActiveFormat}
           anime={formatAnime}
-          loading={masterLoading}
+          loading={formatLoading}
           onPressAnime={navigateToDetails}
           cardWidth={cardWidth}
           cardHeight={cardHeight}
@@ -309,7 +313,7 @@ export default function ExploreScreen({ navigation }) {
           activePill={activeStatus}
           onPillSelect={setActiveStatus}
           anime={statusAnime}
-          loading={masterLoading}
+          loading={statusLoading}
           onPressAnime={navigateToDetails}
           cardWidth={cardWidth}
           cardHeight={cardHeight}
@@ -323,7 +327,7 @@ export default function ExploreScreen({ navigation }) {
           activePill={activeYear}
           onPillSelect={setActiveYear}
           anime={yearAnime}
-          loading={masterLoading}
+          loading={yearLoading}
           onPressAnime={navigateToDetails}
           cardWidth={cardWidth}
           cardHeight={cardHeight}
