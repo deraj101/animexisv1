@@ -25,6 +25,7 @@ import * as Stats from "../services/Userstats";
 import API from "../services/api";
 import CommentSection from "../components/CommentSection";
 import DotCircleLoader from "../components/DotCircleLoader";
+import DownloadService from "../services/DownloadService";
 
 // react-native-svg — optional dep, gracefully absent on web
 let Svg, Circle;
@@ -343,12 +344,102 @@ export default function PlayerScreen({ route, navigation }) {
   // Controls visibility state
   const [controlsVisible, setControlsVisible] = useState(false);
 
+  const [downloadedEps, setDownloadedEps] = useState({});
+  const [downloadingEps, setDownloadingEps] = useState({});
+
+  useEffect(() => {
+    const checkDownloads = async () => {
+      const list = await DownloadService.getDownloads();
+      const map = {};
+      list.filter(d => String(d.animeId) === String(animeId)).forEach(d => {
+        map[d.episodeNumber] = true;
+      });
+      setDownloadedEps(map);
+    };
+    if (animeId) checkDownloads();
+  }, [animeId]);
+
+  const handleDownloadEpisode = async (episodeNum, episodeUrl) => {
+    if (user?.subscription?.toLowerCase() !== 'premium') {
+      Alert.alert("Premium Only", "Offline downloads are exclusive to Premium members. Upgrade to unlock!");
+      return;
+    }
+
+    if (downloadedEps[episodeNum]) {
+      Alert.alert("Already Downloaded", "This episode is already available offline.");
+      return;
+    }
+
+    if (downloadingEps[episodeNum] !== undefined) return;
+
+    try {
+      setDownloadingEps(p => ({ ...p, [episodeNum]: 0 }));
+
+      let directUrl = null;
+      const res = await API.get(`/api/anime/episode-info?url=${encodeURIComponent(episodeUrl)}`);
+      if (res.data.success) {
+        const videoSources = res.data.videoSources || [];
+        const mp4Source = videoSources.find(s => {
+          const url = (s.url || s).toLowerCase();
+          return /\.(mp4|mkv|webm|mov|avi)/i.test(url);
+        });
+
+        if (mp4Source) {
+          const fileUrl = mp4Source.url || mp4Source;
+          directUrl = `${API.defaults.baseURL}/api/anime/download-file?url=${encodeURIComponent(fileUrl)}`;
+        } else {
+          const hlsSource = videoSources.find(s => (s.url || s).toLowerCase().includes('.m3u8'));
+          if (hlsSource) {
+            const streamUrl = hlsSource.url || hlsSource;
+            directUrl = `${API.defaults.baseURL}/api/anime/download-m3u8?format=ts&url=${encodeURIComponent(streamUrl)}`;
+          }
+        }
+      }
+
+      if (!directUrl) {
+        Alert.alert("Error", "No downloadable source found for this episode.");
+        setDownloadingEps(p => {
+          const next = { ...p };
+          delete next[episodeNum];
+          return next;
+        });
+        return;
+      }
+
+      try {
+        await DownloadService.startDownload(
+          { number: episodeNum, directUrl },
+          { id: animeId, title: animeTitle, image: animeImage },
+          (progressInfo) => {
+            setDownloadingEps(p => ({ ...p, [episodeNum]: progressInfo.progress }));
+          }
+        );
+        setDownloadedEps(p => ({ ...p, [episodeNum]: true }));
+        Alert.alert("Success", `Episode ${episodeNum} downloaded successfully!`);
+      } catch (dlErr) {
+        Alert.alert("Download Failed", dlErr.message || "Failed to download episode.");
+      }
+    } catch (err) {
+      console.error("Download error:", err);
+      Alert.alert("Download Failed", err.message || "Failed to download episode.");
+    } finally {
+      setDownloadingEps(p => {
+        const next = { ...p };
+        delete next[episodeNum];
+        return next;
+      });
+    }
+  };
+
   const videoRef = useRef(null);
   const cardAnim = useRef(new Animated.Value(0)).current;
   const cardScale = useRef(new Animated.Value(0.93)).current;
   const controlsAnim = useRef(new Animated.Value(0)).current;
   const hideTimerRef = useRef(null);
   const watchStartRef = useRef(null);
+  const totalWatchTimeRef = useRef(0);
+  const lastPlayStartRef = useRef(null);
+  const isPlayingRef = useRef(false);
   const wasFinishedRef = useRef(false);
   const playbackRef = useRef({ position: 0, duration: 0 }); // track playback for progress sync
   const lastSyncRef = useRef(0); // timestamp of last progress sync
@@ -410,10 +501,25 @@ export default function PlayerScreen({ route, navigation }) {
     return () => {
       if (!watchStartRef.current || !user?.email) return;
       
-      const elapsed = Math.round((Date.now() - watchStartRef.current) / 1000);
-      if (elapsed >= 1) {
-        // Record watch time statistics (ALWAYS, even if finished)
-        Stats.addWatchTime(user.email, elapsed);
+      // Ensure we add any currently accumulating watch time if they unmount while playing
+      if (isPlayingRef.current && lastPlayStartRef.current) {
+        totalWatchTimeRef.current += (Date.now() - lastPlayStartRef.current);
+        isPlayingRef.current = false;
+      }
+      
+      let finalElapsed = Math.round(totalWatchTimeRef.current / 1000);
+      
+      // Fallback: If using an iframe (WebView), we can't accurately track play/pause, 
+      // so we use the total time spent on the screen.
+      if (useWebView || finalElapsed === 0) {
+        const screenTime = Math.round((Date.now() - watchStartRef.current) / 1000);
+        // Only use screenTime fallback if we didn't get any native playback time
+        if (finalElapsed === 0) finalElapsed = screenTime;
+      }
+
+      if (finalElapsed >= 1) {
+        // Record watch time statistics (only actual playtime)
+        Stats.addWatchTime(user.email, finalElapsed);
       }
 
       // Record 'Continue Watching' progress with timestamp (ONLY if not already marked finished)
@@ -790,6 +896,44 @@ export default function PlayerScreen({ route, navigation }) {
     );
   };
 
+  const renderDownloadSection = () => {
+    if (isOffline) return null;
+
+    const isDownloaded = !!downloadedEps[currentEpisodeNumber];
+    const downloadProgress = downloadingEps[currentEpisodeNumber];
+    const isDownloading = downloadProgress !== undefined;
+
+    return (
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+        <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: "600", marginRight: 12 }}>
+          Offline:
+        </Text>
+        
+        {isDownloaded ? (
+          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(16,185,129,0.12)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(16,185,129,0.3)" }}>
+            <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+            <Text style={{ color: "#10b981", fontSize: 13, fontWeight: "600", marginLeft: 6 }}>Downloaded</Text>
+          </View>
+        ) : isDownloading ? (
+          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(250,204,21,0.12)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(250,204,21,0.3)" }}>
+            <Ionicons name="cloud-download" size={16} color="#facc15" />
+            <Text style={{ color: "#facc15", fontSize: 13, fontWeight: "600", marginLeft: 6 }}>
+              Downloading {Math.round(downloadProgress * 100)}%
+            </Text>
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.04)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }}
+            onPress={() => handleDownloadEpisode(currentEpisodeNumber, currentEpisodeUrl)}
+          >
+            <Ionicons name="cloud-download-outline" size={16} color="#fff" />
+            <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600", marginLeft: 6 }}>Download</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
   // ── Player body ───────────────────────────────────────────────────────────────
   const renderPlayerBody = () => {
     if (error) {
@@ -874,6 +1018,18 @@ export default function PlayerScreen({ route, navigation }) {
             onLoad={() => setPlayerLoading(false)}
             onPlaybackStatusUpdate={(status) => {
               if (status.isLoaded && status.durationMillis > 0) {
+                // Tracking actual watch time (only when playing)
+                if (status.isPlaying && !isPlayingRef.current) {
+                  isPlayingRef.current = true;
+                  lastPlayStartRef.current = Date.now();
+                } else if (!status.isPlaying && isPlayingRef.current) {
+                  isPlayingRef.current = false;
+                  if (lastPlayStartRef.current) {
+                    totalWatchTimeRef.current += (Date.now() - lastPlayStartRef.current);
+                    lastPlayStartRef.current = null;
+                  }
+                }
+
                 // Track playback position for progress sync
                 const posSec = status.positionMillis / 1000;
                 const durSec = status.durationMillis / 1000;
@@ -995,6 +1151,7 @@ export default function PlayerScreen({ route, navigation }) {
             </Animated.View>
             <View style={styles.metaCard}>
               {renderSourceSelector()}
+              {renderDownloadSection()}
             </View>
           </ScrollView>
 
@@ -1065,7 +1222,7 @@ export default function PlayerScreen({ route, navigation }) {
         <ScrollView
           showsVerticalScrollIndicator={false}
           style={styles.mobileContainer}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + (width < 768 ? 110 : 24) }}
         >
           <Animated.View style={{ width: playerWidth, height: finalPlayerHeight, position: "relative", backgroundColor: "#000", transform: [{ scale: cardScale }] }}>
             {renderPlayerBody()}
@@ -1075,7 +1232,7 @@ export default function PlayerScreen({ route, navigation }) {
           {/* Anime Info details block */}
           <View style={styles.mobileMetaCard}>
             {renderSourceSelector()}
-
+            {renderDownloadSection()}
           </View>
 
           {/* Dynamic tabs selector inside mobile page flow */}

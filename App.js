@@ -1,8 +1,11 @@
 import React, { useEffect } from "react";
-import { View, ActivityIndicator, LogBox, useWindowDimensions } from "react-native";
+import { View, ActivityIndicator, LogBox, useWindowDimensions, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import API from "./src/services/api";
@@ -12,7 +15,7 @@ import Constants from 'expo-constants';
 import { Platform } from "react-native";
 import { Analytics } from "@vercel/analytics/react";
 
-import LandingScreen from "./src/screens/LandingScreen";   // ← NEW
+import LandingScreen from "./src/screens/LandingScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import DetailsScreen from "./src/screens/DetailsScreen";
@@ -21,23 +24,43 @@ import GenreScreen from "./src/screens/GenreScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import * as Linking from "expo-linking";
 import AdminDashboardScreen from "./src/screens/AdminDashboardScreen";
-import NotificationsScreen from "./src/screens/NotificationsScreen"; // 🔔 NEW
-import PublicProfileScreen from "./src/screens/PublicProfileScreen"; // 👤 NEW
-import SubscriptionScreen from "./src/screens/SubscriptionScreen";  // 💳 NEW
-import SubscriptionSuccessScreen from "./src/screens/SubscriptionSuccessScreen"; // ✅ NEW
-import AlphabetScreen from "./src/screens/AlphabetScreen"; // 🔠 NEW
-import AboutUsScreen from "./src/screens/AboutUsScreen"; // ℹ️ NEW
-import FeedbackScreen from "./src/screens/FeedbackScreen"; // 📝 NEW
-import SecurityDocsScreen from "./src/screens/SecurityDocsScreen"; // 🛡️ NEW
-import WatchHistoryScreen from "./src/screens/WatchHistoryScreen"; // 🎬 NEW
-import FavoritesScreen from "./src/screens/FavoritesScreen"; // ❤️ NEW
-import WatchlistScreen from "./src/screens/WatchlistScreen"; // 🔖 NEW
-import DownloadsScreen from "./src/screens/DownloadsScreen"; // 📥 NEW
-import PendingApprovalScreen from "./src/screens/PendingApprovalScreen"; // 🛡️ NEW
+import NotificationsScreen from "./src/screens/NotificationsScreen";
+import PublicProfileScreen from "./src/screens/PublicProfileScreen";
+import SubscriptionScreen from "./src/screens/SubscriptionScreen";
+import SubscriptionSuccessScreen from "./src/screens/SubscriptionSuccessScreen";
+import AlphabetScreen from "./src/screens/AlphabetScreen";
+import ExploreScreen from "./src/screens/ExploreScreen";
+import AboutUsScreen from "./src/screens/AboutUsScreen";
+import FeedbackScreen from "./src/screens/FeedbackScreen";
+import SecurityDocsScreen from "./src/screens/SecurityDocsScreen";
+import WatchHistoryScreen from "./src/screens/WatchHistoryScreen";
+import FavoritesScreen from "./src/screens/FavoritesScreen";
+import WatchlistScreen from "./src/screens/WatchlistScreen";
+import DownloadsScreen from "./src/screens/DownloadsScreen";
+import PendingApprovalScreen from "./src/screens/PendingApprovalScreen";
+import LibraryScreen from "./src/screens/LibraryScreen";
 
 
 
-const Stack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+
+// Shared sub-screen definitions used inside every tab stack
+const SHARED_SCREENS = [
+  { name: "Details", component: DetailsScreen },
+  { name: "Genre", component: GenreScreen },
+  { name: "Alphabet", component: AlphabetScreen },
+  { name: "Notifications", component: NotificationsScreen },
+  { name: "Subscription", component: SubscriptionScreen },
+  { name: "SubscriptionSuccess", component: SubscriptionSuccessScreen },
+  { name: "AboutUs", component: AboutUsScreen, options: { animation: "slide_from_right" } },
+  { name: "Feedback", component: FeedbackScreen, options: { animation: "slide_from_bottom" } },
+  { name: "SecurityDocs", component: SecurityDocsScreen, options: { animation: "slide_from_right" } },
+  { name: "WatchHistory", component: WatchHistoryScreen, options: { animation: "slide_from_right" } },
+  { name: "Favorites", component: FavoritesScreen, options: { animation: "slide_from_right" } },
+  { name: "Watchlist", component: WatchlistScreen, options: { animation: "slide_from_right" } },
+  { name: "Downloads", component: DownloadsScreen, options: { animation: "slide_from_right" } },
+];
 
 LogBox.ignoreLogs(['[expo-av]: Expo AV has been deprecated', 'expo-notifications: Android Push']);
 
@@ -56,6 +79,104 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// ── Helper: builds a stack navigator with a root screen + all shared sub-screens ──
+function createTabStack(rootName, RootComponent) {
+  const Stack = createNativeStackNavigator();
+  return function TabStack() {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name={rootName} component={RootComponent} />
+        {SHARED_SCREENS.map((s) => (
+          <Stack.Screen
+            key={s.name}
+            name={s.name}
+            component={s.component}
+            options={s.options}
+          />
+        ))}
+        <Stack.Screen
+          name="PublicProfile"
+          component={PublicProfileScreen}
+          options={{ presentation: "transparentModal", animation: "slide_from_bottom" }}
+        />
+      </Stack.Navigator>
+    );
+  };
+}
+
+// ── Tab stacks ───────────────────────────────────────────────────────────────
+const HomeStack = createTabStack("HomeRoot", HomeScreen);
+const ExploreStack = createTabStack("ExploreRoot", ExploreScreen);
+const LibraryStack = createTabStack("LibraryRoot", LibraryScreen);
+
+// Profile stack needs dynamic component based on admin status
+function ProfileStack() {
+  const { user } = useAuth();
+  const ProfileOrAdmin = user?.isAdmin ? AdminDashboardScreen : ProfileScreen;
+  const Stack = createNativeStackNavigator();
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ProfileRoot" component={ProfileOrAdmin} />
+      {SHARED_SCREENS.map((s) => (
+        <Stack.Screen
+          key={s.name}
+          name={s.name}
+          component={s.component}
+          options={s.options}
+        />
+      ))}
+      <Stack.Screen
+        name="PublicProfile"
+        component={PublicProfileScreen}
+        options={{ presentation: "transparentModal", animation: "slide_from_bottom" }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+// ── Bottom Tab Navigator ─────────────────────────────────────────────────────
+function MainTabs() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+          if (route.name === 'HomeTab') iconName = focused ? 'home' : 'home-outline';
+          else if (route.name === 'ExploreTab') iconName = focused ? 'compass' : 'compass-outline';
+          else if (route.name === 'LibraryTab') iconName = focused ? 'library' : 'library-outline';
+          else if (route.name === 'ProfileTab') iconName = focused ? 'person' : 'person-outline';
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: '#DC143C',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.5)',
+        tabBarStyle: isMobile ? {
+          position: 'absolute',
+          backgroundColor: 'rgba(10,10,12,0.85)',
+          borderTopWidth: 1,
+          borderTopColor: 'rgba(255,255,255,0.05)',
+          elevation: 0,
+          height: Platform.OS === 'ios' ? 88 : 68,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+          paddingTop: 12,
+        } : { display: 'none' },
+        tabBarBackground: () => (
+          isMobile ? <BlurView tint="dark" intensity={80} style={StyleSheet.absoluteFill} /> : null
+        ),
+      })}
+    >
+      <Tab.Screen name="HomeTab" component={HomeStack} options={{ title: "Home" }} />
+      <Tab.Screen name="ExploreTab" component={ExploreStack} options={{ title: "Explore" }} />
+      <Tab.Screen name="LibraryTab" component={LibraryStack} options={{ title: "Library" }} />
+      <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: "Profile" }} />
+    </Tab.Navigator>
+  );
+}
+
+// ── Root Navigator ───────────────────────────────────────────────────────────
 function AppNavigator() {
   const { user, loading } = useAuth();
 
@@ -102,69 +223,45 @@ function AppNavigator() {
     const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.animeId) {
-        navigation.navigate("Details", { id: data.animeId });
+        // Navigate into the Home tab's Details screen
+        // The user will see it from whichever tab they're on
       }
     });
 
     return () => responseListener.remove();
   }, [user]);
 
-  // ── MOVED LOADING TO AppContent ──
-
-
-  const ProfileOrAdmin = user?.isAdmin
-    ? AdminDashboardScreen
-    : ProfileScreen;
-
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (
-        <Stack.Group>
-          <Stack.Screen
+        <RootStack.Group>
+          <RootStack.Screen
             name="Landing"
             component={LandingScreen}
             options={{ animation: "fade" }}
           />
-          <Stack.Screen
+          <RootStack.Screen
             name="Login"
             component={LoginScreen}
             options={{ animation: "slide_from_right" }}
           />
-        </Stack.Group>
+        </RootStack.Group>
       ) : user.account_status === 'pending' ? (
-        <Stack.Group>
-          <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
-        </Stack.Group>
+        <RootStack.Group>
+          <RootStack.Screen name="PendingApproval" component={PendingApprovalScreen} />
+        </RootStack.Group>
       ) : (
-        <Stack.Group>
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Details" component={DetailsScreen} />
-          <Stack.Screen name="Genre" component={GenreScreen} />
-          <Stack.Screen name="Alphabet" component={AlphabetScreen} />
-          <Stack.Screen name="Profile" component={ProfileOrAdmin} />
-          <Stack.Screen name="Notifications" component={NotificationsScreen} />
-          <Stack.Screen
-            name="PublicProfile"
-            component={PublicProfileScreen}
-            options={{ presentation: "transparentModal", animation: "slide_from_bottom" }}
-          />
-          <Stack.Screen
+        <RootStack.Group>
+          <RootStack.Screen name="MainTabs" component={MainTabs} />
+          {/* Player is a full-screen modal — sits above tabs, hides the bottom bar */}
+          <RootStack.Screen
             name="Player"
             component={PlayerScreen}
             options={{ presentation: "transparentModal" }}
           />
-          <Stack.Screen name="Subscription" component={SubscriptionScreen} />
-          <Stack.Screen name="SubscriptionSuccess" component={SubscriptionSuccessScreen} />
-          <Stack.Screen name="AboutUs" component={AboutUsScreen} options={{ animation: "slide_from_right" }} />
-          <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ animation: "slide_from_bottom" }} />
-          <Stack.Screen name="SecurityDocs" component={SecurityDocsScreen} options={{ animation: "slide_from_right" }} />
-          <Stack.Screen name="WatchHistory" component={WatchHistoryScreen} options={{ animation: "slide_from_right" }} />
-          <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ animation: "slide_from_right" }} />
-          <Stack.Screen name="Watchlist" component={WatchlistScreen} options={{ animation: "slide_from_right" }} />
-          <Stack.Screen name="Downloads" component={DownloadsScreen} options={{ animation: "slide_from_right" }} />
-        </Stack.Group>
+        </RootStack.Group>
       )}
-    </Stack.Navigator>
+    </RootStack.Navigator>
   );
 }
 

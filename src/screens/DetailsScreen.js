@@ -100,7 +100,7 @@ function SkeletonDetails({ shimmerX, width }) {
 }
 
 // ─── ANIMATED EPISODE CARD ────────────────────────────────────────────────────
-const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, onDownload, isActive, progressPercent, isDownloaded, downloadProgress }) {
+const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isActive, progressPercent }) {
   const scale   = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const slideY  = useRef(new Animated.Value(16)).current;
@@ -125,8 +125,7 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, onDo
   const onPressOut = useCallback(() =>
     Animated.spring(scale, { toValue: 1, tension: 140, friction: 7, useNativeDriver: true }).start(), []);
 
-  const isDownloading = downloadProgress !== undefined;
-  const isSearching = downloadProgress === -1;
+
 
   return (
     <Animated.View style={[styles.episodeCardWrap, { opacity, transform: [{ translateY: slideY }, { scale }] }]}>
@@ -152,28 +151,6 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, onDo
         </View>
 
         <View style={styles.episodeActions}>
-          {isDownloaded ? (
-            <View style={styles.downloadStatus}>
-              <Ionicons name="checkmark-circle" size={18} color="#10b981" />
-            </View>
-          ) : isSearching ? (
-            <View style={styles.downloadProgress}>
-              <Text style={[styles.progressText, { fontSize: 9 }]}>Finding...</Text>
-            </View>
-          ) : isDownloading ? (
-            <View style={styles.downloadProgress}>
-              <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
-            </View>
-          ) : (
-            <TouchableOpacity 
-              style={styles.downloadBtn} 
-              onPress={() => onDownload(item)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="cloud-download-outline" size={18} color={C.dim} />
-            </TouchableOpacity>
-          )}
-
           <View style={[styles.episodePlayIcon, isActive && styles.episodePlayIconActive]}>
             <Ionicons name={isActive ? "pause" : "play"} size={14} color="white" />
           </View>
@@ -191,9 +168,7 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, onDo
   prev.isActive          === next.isActive &&
   prev.item              === next.item     &&
   prev.index             === next.index    &&
-  prev.progressPercent   === next.progressPercent &&
-  prev.isDownloaded      === next.isDownloaded &&
-  prev.downloadProgress  === next.downloadProgress
+  prev.progressPercent   === next.progressPercent
 );
 
 // ─── INFO TILE ────────────────────────────────────────────────────────────────
@@ -436,102 +411,7 @@ export default function DetailsScreen({ route, navigation }) {
     }
   }, [anime, navigation, initialTitle, user, id]);
 
-  const [downloadedEps, setDownloadedEps] = useState({}); // { epNum: true }
-  const [downloadingEps, setDownloadingEps] = useState({}); // { epNum: progress }
 
-  useEffect(() => {
-    const checkDownloads = async () => {
-      const list = await DownloadService.getDownloads();
-      const map = {};
-      list.filter(d => d.animeId === id).forEach(d => {
-        map[d.episodeNumber] = true;
-      });
-      setDownloadedEps(map);
-    };
-    if (id) checkDownloads();
-  }, [id]);
-
-  const handleDownloadEpisode = async (episode) => {
-    if (user?.subscription?.toLowerCase() !== 'premium') {
-      Alert.alert("Premium Only", "Offline downloads are exclusive to Premium members. Upgrade to unlock!");
-      return;
-    }
-
-    if (downloadedEps[episode.number]) {
-      Alert.alert("Already Downloaded", "This episode is already available offline.");
-      return;
-    }
-
-    if (downloadingEps[episode.number] !== undefined) return;
-
-    try {
-      setDownloadingEps(p => ({ ...p, [episode.number]: 0 }));
-
-      let directUrl = null;
-      // Use the regular episode sources directly.
-      if (!directUrl) {
-        console.log('[Download] 🔄 Falling back to Gogo sources...');
-        const res = await API.get(`/api/anime/episode-info?url=${encodeURIComponent(episode.url)}`);
-        if (res.data.success) {
-          const videoSources = res.data.videoSources || [];
-          
-          // Look for direct MP4/MKV/WebM
-          const mp4Source = videoSources.find(s => {
-            const url = (s.url || s).toLowerCase();
-            return /\.(mp4|mkv|webm|mov|avi)/i.test(url);
-          });
-
-          if (mp4Source) {
-            const fileUrl = mp4Source.url || mp4Source;
-            directUrl = `${API.defaults.baseURL}/api/anime/download-file?url=${encodeURIComponent(fileUrl)}`;
-          } else {
-            // HLS fallback — use backend proxy
-            const hlsSource = videoSources.find(s => (s.url || s).toLowerCase().includes('.m3u8'));
-            if (hlsSource) {
-            const streamUrl = hlsSource.url || hlsSource;
-            directUrl = `${API.defaults.baseURL}/api/anime/download-m3u8?format=ts&url=${encodeURIComponent(streamUrl)}`;
-          }
-          }
-        }
-      }
-
-      if (!directUrl) {
-        Alert.alert("Error", "No downloadable source found for this episode.");
-        setDownloadingEps(p => {
-          const next = { ...p };
-          delete next[episode.number];
-          return next;
-        });
-        return;
-      }
-
-      // ── STEP 3: Download the file ─────────────────────────────────────────
-      setDownloadingEps(p => ({ ...p, [episode.number]: 0 }));
-      
-      try {
-        await DownloadService.startDownload(
-          { ...episode, directUrl },
-          { id, title: anime?.title || initialTitle, image: anime?.image },
-          (progress) => {
-            setDownloadingEps(p => ({ ...p, [episode.number]: progress }));
-          }
-        );
-        setDownloadedEps(p => ({ ...p, [episode.number]: true }));
-        Alert.alert("Success", `Episode ${episode.number} downloaded successfully!`);
-      } catch (dlErr) {
-        Alert.alert("Download Failed", dlErr.message || "Failed to download episode.");
-      }
-    } catch (err) {
-      console.error("Download error:", err);
-      Alert.alert("Download Failed", err.message || "Failed to download episode.");
-    } finally {
-      setDownloadingEps(p => {
-        const next = { ...p };
-        delete next[episode.number];
-        return next;
-      });
-    }
-  };
 
   const handleToggleFavorite = async () => {
     if (!user) {
@@ -607,11 +487,8 @@ export default function DetailsScreen({ route, navigation }) {
         item={item}
         index={index}
         onPress={handleEpisodePress}
-        onDownload={handleDownloadEpisode}
         isActive={activeEpIndex === index}
         progressPercent={progressPercent}
-        isDownloaded={!!downloadedEps[item.number]}
-        downloadProgress={downloadingEps[item.number]}
       />
     );
   }, [handleEpisodePress, activeEpIndex, episodeProgress]);
@@ -708,7 +585,7 @@ export default function DetailsScreen({ route, navigation }) {
       <Animated.ScrollView
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: 40 + insets.bottom }]}
+        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: (width < 768 ? 110 : 40) + insets.bottom }]}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true }

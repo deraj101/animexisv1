@@ -263,10 +263,11 @@ const ActivityRow = React.memo(function ActivityRow({ icon, color, title, sub, t
 
 // ─── USER ROW ─────────────────────────────────────────────────────────────────
 const UserRow = React.memo(function UserRow({
-  email, joinedAgo, seenAgo, last, onToggleBypass, bypassed, isToggling,
+  email, name, joinedAgo, seenAgo, last, onToggleBypass, bypassed, isToggling,
   subscription, onToggleSubscription, onDeleteUser, onEditUser
 }) {
-  const letter = email?.[0]?.toUpperCase() || "?";
+  const displayName = name || 'Unknown User';
+  const letter = displayName[0]?.toUpperCase() || "?";
   return (
     <View style={[styles.userRow, !last && styles.userRowBorder, isToggling && { opacity: 0.5 }]}>
       <View style={styles.userAvatar}>
@@ -274,7 +275,7 @@ const UserRow = React.memo(function UserRow({
       </View>
 
       <View style={styles.userInfo}>
-        <Text style={styles.userEmail} numberOfLines={1}>{email}</Text>
+        <Text style={styles.userEmail} numberOfLines={1}>{displayName}</Text>
         <View style={styles.userMetaRow}>
           <Text style={styles.userMeta}>Joined {joinedAgo} · Active {seenAgo}</Text>
           {bypassed && (
@@ -295,7 +296,7 @@ const UserRow = React.memo(function UserRow({
       <View style={styles.userActions}>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => onEditUser({ email, name: email.split('@')[0], subscription })}
+          onPress={() => onEditUser({ email, name: name || '', subscription })}
           hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
         >
           <Ionicons name="create-outline" size={15} color={C.white} />
@@ -699,8 +700,9 @@ export default function AdminDashboardScreen({ navigation }) {
     try {
       const cfg = { headers: await getAuthHeader() };
       const endpoint = status === 'approved' ? 'approve' : 'reject';
-      await API.post(`/api/admin/subscription-requests/${id}/${endpoint}`, { adminNote: note }, cfg);
-      setSubRequests(prev => prev.filter(r => r._id !== id));
+      const res = await API.post(`/api/admin/subscription-requests/${id}/${endpoint}`, { adminNote: note }, cfg);
+      const processedId = res.data?.request?._id || id;
+      setSubRequests(prev => prev.filter(r => String(r._id) !== String(processedId)));
       if (Platform.OS === 'web') {
         window.alert(`Subscription request ${status}.`);
       } else {
@@ -1481,7 +1483,8 @@ export default function AdminDashboardScreen({ navigation }) {
                   <Text style={styles.emptyText}>No users yet.</Text>
                 ) : (
                   recentUsers.slice(0, 5).map((u, i) => {
-                    const letter = u.email?.[0]?.toUpperCase() || "?";
+                    const displayName = u.name || 'Unknown User';
+                    const letter = displayName[0]?.toUpperCase() || "?";
                     return (
                       <View
                         key={u.email || i}
@@ -1494,7 +1497,7 @@ export default function AdminDashboardScreen({ navigation }) {
                           <Text style={styles.userAvatarLetter}>{letter}</Text>
                         </View>
                         <View style={styles.userInfo}>
-                          <Text style={styles.userEmail} numberOfLines={1}>{u.email}</Text>
+                          <Text style={styles.userEmail} numberOfLines={1}>{displayName}</Text>
                           <View style={styles.userMetaRow}>
                             <Text style={styles.userMeta}>Joined {u.joinedAgo}</Text>
                             {u.subscription === "premium" && (
@@ -1630,6 +1633,7 @@ export default function AdminDashboardScreen({ navigation }) {
                     <UserRow
                       key={u.email || i}
                       email={u.email}
+                      name={u.name}
                       joinedAgo={u.joinedAgo}
                       seenAgo={u.seenAgo}
                       last={i === recentUsers.length - 1}
@@ -1658,10 +1662,10 @@ export default function AdminDashboardScreen({ navigation }) {
                   pendingUsers.map((u, i) => (
                     <View key={u.email || i} style={[styles.userRow, i < pendingUsers.length - 1 && styles.userRowBorder]}>
                       <View style={styles.userAvatar}>
-                        <Text style={styles.userAvatarLetter}>{u.email[0].toUpperCase()}</Text>
+                        <Text style={styles.userAvatarLetter}>{(u.name || 'U')[0].toUpperCase()}</Text>
                       </View>
                       <View style={styles.userInfo}>
-                        <Text style={styles.userEmail}>{u.email}</Text>
+                        <Text style={styles.userEmail}>{u.name || 'Unknown User'}</Text>
                         <Text style={styles.userMeta}>Joined {u.joinedAgo}</Text>
                       </View>
                       <View style={{ flexDirection: 'row', gap: 8 }}>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../services/api";
 
@@ -76,7 +76,7 @@ export function AuthProvider({ children }) {
    * refreshSession — Manually re-fetch profile from the server
    * to sync subscription status (Premium).
    */
-  const refreshSession = async () => {
+  const refreshSession = useCallback(async () => {
     if (!user?.email) return;
     try {
       const res = await API.get(`/api/users/public-profile/${user.email}`);
@@ -89,7 +89,7 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error("[AuthContext] Refresh failed:", err.message);
     }
-  };
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signOut, updateUser, refreshSession }}>

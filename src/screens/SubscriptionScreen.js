@@ -36,7 +36,6 @@ export default function SubscriptionScreen({ navigation }) {
         : ExpoLinking.createURL("");
 
       const res = await API.post("/api/payments/create-checkout-session", {
-        priceId: process.env.EXPO_PUBLIC_STRIPE_PREMIUM_PRICE_ID || "price_default", // Configured in .env
         successUrl,
         cancelUrl,
       });
@@ -135,11 +134,11 @@ export default function SubscriptionScreen({ navigation }) {
             </TouchableOpacity>
 
             <View style={styles.paymentIcons}>
-                <Text style={styles.paymentText}>Supports Credit and Debit Cards (via Stripe)</Text>
+                <Text style={styles.paymentText}>Supports E-Wallets, Cards, and more (via Xendit)</Text>
                 <View style={styles.iconRow}>
+                   <View style={styles.walletBadge}><Text style={styles.walletText}>GCASH</Text></View>
+                   <View style={styles.walletBadge}><Text style={styles.walletText}>MAYA</Text></View>
                    <Ionicons name="card-outline" size={20} color={C.dim} />
-                   <Ionicons name="logo-visa" size={20} color={C.dim} />
-                   <Ionicons name="logo-mastercard" size={20} color={C.dim} />
                 </View>
             </View>
           </View>

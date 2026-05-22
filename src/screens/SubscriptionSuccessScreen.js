@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   BackHandler,
-  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,9 +14,10 @@ import API from "../services/api";
 import DotCircleLoader from "../components/DotCircleLoader";
 
 export default function SubscriptionSuccessScreen({ navigation, route }) {
-  const { user, refreshSession } = useAuth();
+  const { refreshSession } = useAuth();
   const [isVerifying, setIsVerifying] = useState(true);
   const [error, setError] = useState(null);
+  const [pendingApproval, setPendingApproval] = useState(false);
 
   const sessionId = route?.params?.session_id;
 
@@ -29,13 +29,18 @@ export default function SubscriptionSuccessScreen({ navigation, route }) {
 
     const checkStatus = async () => {
       if (!sessionId) {
+        setError("Missing payment session. Please check your subscription status from your profile.");
         setIsVerifying(false);
         return;
       }
 
       try {
         const res = await API.get(`/api/payments/sync-session/${sessionId}`);
-        if (res.data.success && res.data.subscription === "premium") {
+        if (res.data.success && res.data.status === "pending_approval") {
+          setPendingApproval(true);
+          setIsVerifying(false);
+          clearInterval(interval);
+        } else if (res.data.success && res.data.subscription === "premium") {
           await refreshSession();
           setIsVerifying(false);
           clearInterval(interval);
@@ -47,7 +52,7 @@ export default function SubscriptionSuccessScreen({ navigation, route }) {
       attempts++;
       if (attempts >= maxAttempts) {
         setIsVerifying(false);
-        setError("Verification taking longer than usual, but don't worry! Your premium status will update shortly.");
+        setError("Verification is taking longer than usual. If your payment went through, it will appear in the admin review queue shortly.");
         clearInterval(interval);
       }
     };
@@ -58,18 +63,31 @@ export default function SubscriptionSuccessScreen({ navigation, route }) {
     return () => clearInterval(interval);
   }, [sessionId, refreshSession]);
 
+  const goHome = useCallback(() => {
+    const parent = navigation.getParent?.();
+    if (parent) {
+      parent.navigate("HomeTab", { screen: "HomeRoot" });
+      return;
+    }
+
+    navigation.navigate("MainTabs", {
+      screen: "HomeTab",
+      params: { screen: "HomeRoot" },
+    });
+  }, [navigation]);
+
   // 2. Back Handler
   useEffect(() => {
     const backAction = () => {
-      navigation.replace("Home");
+      goHome();
       return true;
     };
     const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
     return () => backHandler.remove();
-  }, [navigation]);
+  }, [goHome]);
 
   const handleContinue = () => {
-    navigation.replace("Home");
+    goHome();
   };
 
   return (
@@ -99,12 +117,16 @@ export default function SubscriptionSuccessScreen({ navigation, route }) {
         </View>
 
         <Text style={styles.title}>
-          {isVerifying ? "Verifying Payment..." : "Welcome to Premium!"}
+          {isVerifying ? "Verifying Payment..." : error ? "Payment Status Unknown" : pendingApproval ? "Payment Under Review" : "Welcome to Premium!"}
         </Text>
         <Text style={styles.subtitle}>
           {isVerifying 
-            ? "We're confirming your subscription with Stripe. This usually takes a few seconds..." 
-            : "Your payment was successful. You now have unlimited, ad-free access to the entire Animexis catalog."
+            ? "We're confirming your subscription with Xendit. This usually takes a few seconds..." 
+            : error
+              ? "We could not confirm the payment status right now."
+              : pendingApproval
+              ? "Your payment was received. An admin will verify it before premium is activated on your account."
+              : "Your payment was approved. You now have unlimited, ad-free access to the entire Animexis catalog."
           }
         </Text>
 
@@ -121,7 +143,9 @@ export default function SubscriptionSuccessScreen({ navigation, route }) {
           <View style={styles.infoBox}>
             <Ionicons name="information-circle-outline" size={20} color={C.dim} />
             <Text style={styles.infoText}>
-              Your journey starts now. Your premium badge and borders are now active on your profile.
+              {pendingApproval
+                ? "You can keep using Animexis while your payment is reviewed. Premium unlocks after admin approval."
+                : "Your journey starts now. Your premium badge and borders are now active on your profile."}
             </Text>
           </View>
         )}
@@ -138,7 +162,7 @@ export default function SubscriptionSuccessScreen({ navigation, route }) {
             style={styles.btnGrad}
           >
             <Text style={styles.btnText}>
-              {isVerifying ? "Please Wait..." : "Start Watching"}
+              {isVerifying ? "Please Wait..." : pendingApproval ? "Back to Home" : "Start Watching"}
             </Text>
             {!isVerifying && <Ionicons name="arrow-forward" size={18} color="#fff" />}
           </LinearGradient>

@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import * as ImagePicker from "expo-image-picker";
+import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
 import { Image } from "expo-image";
@@ -143,7 +144,7 @@ const Section = ({ title, children }) => (
 
 // ─── PROFILE SCREEN ───────────────────────────────────────────────────────────
 export default function ProfileScreen({ navigation }) {
-  const { user, signOut, updateUser } = useAuth();
+  const { user, signOut, updateUser, refreshSession } = useAuth();
 
   // Avatar
   const [avatarUri, setAvatarUri] = useState(user?.profile_image || null);
@@ -240,7 +241,30 @@ export default function ProfileScreen({ navigation }) {
     finally { setStatsLoading(false); }
     // Only depend on the user identity — NOT local state like username/avatarUri/nameInput.
     // Those are SET by loadAll, so including them causes an infinite re-render loop.
-  }, [user?.email, user?.name, user?.profile_image]);
+  }, [user?.email, user?.name, user?.profile_image, user?.profile_border]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+
+      const syncFreshProfile = async () => {
+        const freshUser = await refreshSession?.();
+        if (!alive || !freshUser) return;
+
+        setUsage(prev => ({
+          ...prev,
+          subscription: freshUser.subscription || prev.subscription || 'free'
+        }));
+        setProfileBorder(freshUser.subscription === 'premium' ? freshUser.profile_border || null : null);
+      };
+
+      syncFreshProfile();
+
+      return () => {
+        alive = false;
+      };
+    }, [refreshSession])
+  );
 
   /** 
    * Sync local state whenever global user context updates 
@@ -257,7 +281,11 @@ export default function ProfileScreen({ navigation }) {
     if (user?.profile_border) {
       setProfileBorder(user.profile_border);
     }
-  }, [user?.name, user?.profile_image, user?.profile_border]);
+    setUsage(prev => ({
+      ...prev,
+      subscription: user?.subscription || prev.subscription || 'free'
+    }));
+  }, [user?.name, user?.profile_image, user?.profile_border, user?.subscription]);
 
   useEffect(() => {
     loadAll();
