@@ -2321,15 +2321,6 @@ const styles = StyleSheet.create({
   searchBadgeText: { color: C.dim, fontSize: 10, fontWeight: "600" },
 
   // ── Navbar & Navigation ──
-  navContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    zIndex: 10,
-  },
-
   // 📱 Mobile Menu Styles
   mobileMenuDropdown: {
     position: 'absolute',
@@ -2454,8 +2445,6 @@ const styles = StyleSheet.create({
   limitDismissBtn: { marginTop: 16, paddingVertical: 8 },
   limitDismissText: { color: C.dimmer, fontSize: 13, fontWeight: "600" },
 
-  logoRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-
   heroMetaRow: {
     flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6,
   },
@@ -2473,15 +2462,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
   },
   heroMetaPillText: { color: "rgba(255,255,255,0.75)", fontSize: 11, fontWeight: "600" },
-  heroGenreRow: {
-    flexDirection: "row", gap: 6, marginBottom: 10, flexWrap: "wrap",
-  },
-  heroGenrePill: {
-    backgroundColor: "rgba(220,20,60,0.12)", borderWidth: 1, borderColor: C.crimson + "60",
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
-  },
-  heroGenreText: { color: C.white, fontSize: 11, fontWeight: "700" },
-
   paginationRow: {
     flexDirection: "row",
     alignItems: "center",

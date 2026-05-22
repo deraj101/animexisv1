@@ -63,7 +63,7 @@ let WebViewComponent;
 
 if (Platform.OS === 'web') {
   // Web: plain iframe, NO sandbox so embed players work fully
-  WebViewComponent = ({ source, style, onLoadStart, onLoadEnd, onError }) => {
+  WebViewComponent = function WebIframe({ source, style, onLoadStart, onLoadEnd, onError }) {
     const iframeRef = React.useRef(null);
 
     React.useEffect(() => {
@@ -98,7 +98,8 @@ if (Platform.OS === 'web') {
 } else {
   // Native: use react-native-webview with injected ad-blocker
   const { WebView } = require('react-native-webview');
-  WebViewComponent = ({ injectedJavaScript, ...props }) => (
+  WebViewComponent = function NativeAdBlockedWebView({ injectedJavaScript, ...props }) {
+    return (
     <WebView
       {...props}
       injectedJavaScript={AD_BLOCK_SCRIPT + (injectedJavaScript || '')}
@@ -114,7 +115,8 @@ if (Platform.OS === 'web') {
         return true;
       }}
     />
-  );
+    );
+  };
 }
 
 // ─── FALLBACK ─────────────────────────────────────────────────────────────────

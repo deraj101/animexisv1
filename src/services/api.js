@@ -1,8 +1,15 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Use env var if available (Vercel/Production), fallback to local IP for Expo Go
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.180.34.17:3000';
+const requireApiUrl = () => {
+  const url = process.env.EXPO_PUBLIC_API_URL;
+  if (!url) {
+    throw new Error('Missing EXPO_PUBLIC_API_URL. Set it to your deployed API URL before running the app.');
+  }
+  return url;
+};
+
+export const BASE_URL = requireApiUrl();
 console.log('[API] Using baseURL:', BASE_URL);
 
 const API = axios.create({ 

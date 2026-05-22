@@ -432,9 +432,10 @@ export default function ProfileScreen({ navigation }) {
       if (!res.data?.success) throw new Error(res.data?.message || "Hash generation failed.");
       setSecureHashes({
         emailHash: res.data.email_hash,
-        passwordHash: res.data.password_hash,
+        passwordHash: res.data.password_hash || res.data.password_hash_status,
+        passwordHashAvailable: !!res.data.password_hash_available,
         emailAlgorithm: res.data.email_algorithm || "SHA-256",
-        passwordAlgorithm: res.data.password_algorithm || "bcrypt",
+        passwordAlgorithm: res.data.password_algorithm || "Protected",
       });
     } catch (err) {
       setHashModalVisible(false);
@@ -912,6 +913,7 @@ export default function ProfileScreen({ navigation }) {
                     <TouchableOpacity
                       style={styles.copyHashBtn}
                       onPress={() => handleCopyHash("password", secureHashes?.passwordHash)}
+                      disabled={!secureHashes?.passwordHashAvailable}
                     >
                       <Ionicons name={copiedHash === "password" ? "checkmark" : "copy-outline"} size={15} color={C.white} />
                       <Text style={styles.copyHashText}>{copiedHash === "password" ? "Copied" : "Copy"}</Text>

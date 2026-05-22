@@ -42,6 +42,7 @@ const HistoryItem = React.memo(({ item, onPress }) => {
     </TouchableOpacity>
   );
 });
+HistoryItem.displayName = "HistoryItem";
 
 export default function WatchHistoryScreen({ navigation }) {
   const insets = useSafeAreaInsets();

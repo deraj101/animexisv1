@@ -4,7 +4,10 @@ import { Alert, Platform } from 'react-native';
 
 const DOWNLOADS_KEY = 'animexis_offline_downloads';
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.180.34.17:3000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+if (!API_BASE_URL) {
+    throw new Error('Missing EXPO_PUBLIC_API_URL. Premium downloads need the deployed API URL.');
+}
 const DOWNLOAD_FORMAT_VERSION = 2;
 
 class DownloadService {

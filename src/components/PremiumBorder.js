@@ -5,10 +5,8 @@ import Animated, {
   useSharedValue, 
   withRepeat, 
   withTiming, 
-  interpolate,
   Easing,
-  withSequence,
-  withDelay
+  withSequence
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -17,8 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient';
  * Styles: 'gold', 'neon', 'cosmic'
  */
 const PremiumBorder = ({ children, borderStyle, size = 50, borderWidth = 3 }) => {
-  if (!borderStyle) return <>{children}</>;
-
   const rotation = useSharedValue(0);
   const pulse = useSharedValue(1);
 
@@ -61,6 +57,8 @@ const PremiumBorder = ({ children, borderStyle, size = 50, borderWidth = 3 }) =>
 
   const containerSize = size + (borderWidth * 2) + 4; // Add padding for the border
   const radius = containerSize / 2;
+
+  if (!borderStyle) return <>{children}</>;
 
   return (
     <View style={[styles.outer, { width: containerSize, height: containerSize, borderRadius: radius }]}>

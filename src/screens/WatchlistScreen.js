@@ -51,6 +51,7 @@ const WatchlistCard = React.memo(({ item, index, onPress }) => {
     </Animated.View>
   );
 });
+WatchlistCard.displayName = "WatchlistCard";
 
 export default function WatchlistScreen({ navigation }) {
   const insets = useSafeAreaInsets();

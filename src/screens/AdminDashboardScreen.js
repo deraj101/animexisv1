@@ -501,24 +501,6 @@ const sidebarStyles = StyleSheet.create({
 export default function AdminDashboardScreen({ navigation }) {
   const { user, signOut } = useAuth();
 
-  if (!user?.isAdmin) {
-    return (
-      <View style={styles.screen}>
-        <StatusBar style="light" />
-        <View style={styles.accessDenied}>
-          <View style={styles.accessDeniedIcon}>
-            <Ionicons name="lock-closed" size={36} color={C.crimson} />
-          </View>
-          <Text style={styles.accessDeniedTitle}>Access Denied</Text>
-          <Text style={styles.accessDeniedSub}>This area is for admins only.</Text>
-          <TouchableOpacity style={styles.accessDeniedBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.accessDeniedBtnText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
   // ── State ──────────────────────────────────────────────────────────────────
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
@@ -1312,6 +1294,24 @@ export default function AdminDashboardScreen({ navigation }) {
   const navOpacity = scrollY.interpolate({
     inputRange: [60, 110], outputRange: [0, 1], extrapolate: "clamp",
   });
+
+  if (!user?.isAdmin) {
+    return (
+      <View style={styles.screen}>
+        <StatusBar style="light" />
+        <View style={styles.accessDenied}>
+          <View style={styles.accessDeniedIcon}>
+            <Ionicons name="lock-closed" size={36} color={C.crimson} />
+          </View>
+          <Text style={styles.accessDeniedTitle}>Access Denied</Text>
+          <Text style={styles.accessDeniedSub}>This area is for admins only.</Text>
+          <TouchableOpacity style={styles.accessDeniedBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.accessDeniedBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   if (loading) {
     return <SkeletonDashboard />;

@@ -9,6 +9,7 @@
     "android": "node ./scripts/update-ip.js && expo start --android",
     "ios": "node ./scripts/update-ip.js && expo start --ios",
     "web": "expo start --web",
+    "build:web": "expo export --platform web",
     "lint": "expo lint"
   },
   "dependencies": {
