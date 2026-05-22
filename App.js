@@ -153,15 +153,24 @@ function MainTabs() {
         },
         tabBarActiveTintColor: '#DC143C',
         tabBarInactiveTintColor: 'rgba(255,255,255,0.5)',
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: -2,
+          marginBottom: Platform.OS === 'ios' ? 0 : 4,
+        },
+        tabBarIconStyle: {
+          marginTop: 4,
+        },
         tabBarStyle: isMobile ? {
           position: 'absolute',
           backgroundColor: 'rgba(10,10,12,0.85)',
           borderTopWidth: 1,
           borderTopColor: 'rgba(255,255,255,0.05)',
           elevation: 0,
-          height: Platform.OS === 'ios' ? 88 : 68,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 12,
-          paddingTop: 12,
+          height: Platform.OS === 'ios' ? 92 : 72,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+          paddingTop: 8,
         } : { display: 'none' },
         tabBarBackground: () => (
           isMobile ? <BlurView tint="dark" intensity={80} style={StyleSheet.absoluteFill} /> : null

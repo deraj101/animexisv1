@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,9 @@ import {
   ScrollView,
   FlatList,
   useWindowDimensions,
+  Animated,
+  ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,7 +17,6 @@ import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import API from "../services/api";
 import AnimeCard from "../components/AnimeCard";
-import SkeletonGrid from "../components/SkeletonGrid"; // Assuming we have this or I'll implement inline shimmer
 
 const C = {
   bg: "#080809",
@@ -35,198 +37,298 @@ const GENRES = [
   "Supernatural", "Thriller", "Vampire",
 ];
 
-const FORMATS = ["All", "TV", "Movie", "OVA", "ONA", "Special", "Music"];
-const STATUSES = ["All", "Ongoing", "Completed", "Upcoming"];
+const FORMATS = ["TV", "Movie", "OVA", "ONA", "Special", "Music"];
+const STATUSES = ["Ongoing", "Completed", "Upcoming"];
 const currentYear = new Date().getFullYear();
-const YEARS = ["All", ...Array.from({ length: currentYear - 2008 }, (_, i) => String(currentYear + 1 - i))];
+const YEARS = Array.from({ length: currentYear - 2008 }, (_, i) => String(currentYear + 1 - i));
 
+// ─── Horizontal Filter Pills ────────────────────────────────────────────────
+function FilterPills({ options, activeValue, onSelect }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+    >
+      {options.map((opt) => {
+        const isActive = activeValue === opt;
+        return (
+          <TouchableOpacity
+            key={opt}
+            style={[styles.filterPill, isActive && styles.filterPillActive]}
+            onPress={() => onSelect(isActive ? null : opt)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+              {opt}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+// ─── Shimmer Placeholder Card ───────────────────────────────────────────────
+function ShimmerCard({ cardWidth, cardHeight }) {
+  return (
+    <View style={{
+      width: cardWidth,
+      height: cardHeight,
+      backgroundColor: C.surfaceHigh,
+      borderRadius: 8,
+      marginRight: 10,
+      opacity: 0.5,
+    }} />
+  );
+}
+
+// ─── Explore Section (1 row: title + pills + horizontal anime cards) ────────
+function ExploreSection({ title, icon, pills, activePill, onPillSelect, anime, loading, onPressAnime, cardWidth, cardHeight }) {
+  return (
+    <View style={styles.section}>
+      {/* Section Header */}
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionAccent} />
+        <Ionicons name={icon} size={18} color={C.crimson} style={{ marginRight: 8 }} />
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+
+      {/* Filter Pills */}
+      <View style={{ marginBottom: 14 }}>
+        <FilterPills options={pills} activeValue={activePill} onSelect={onPillSelect} />
+      </View>
+
+      {/* Horizontal Anime Cards */}
+      {loading ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <ShimmerCard key={i} cardWidth={cardWidth} cardHeight={cardHeight} />
+          ))}
+        </ScrollView>
+      ) : anime.length === 0 ? (
+        <View style={styles.emptyRow}>
+          <Text style={styles.emptyRowText}>
+            No anime found. Try a different filter.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={anime}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item, index) => `${item.slug || item.id}-${index}`}
+          contentContainerStyle={{ paddingHorizontal: 16 }}
+          renderItem={({ item, index }) => (
+            <AnimeCard
+              item={item}
+              cardWidth={cardWidth}
+              cardHeight={cardHeight}
+              onPress={onPressAnime}
+              index={index}
+              containerStyle={{ marginRight: 10 }}
+            />
+          )}
+        />
+      )}
+    </View>
+  );
+}
+
+// ─── EXPLORE SCREEN ─────────────────────────────────────────────────────────
 export default function ExploreScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
-  const [activeGenre, setActiveGenre] = useState(null);
-  const [activeFormat, setActiveFormat] = useState("All");
-  const [activeStatus, setActiveStatus] = useState("All");
-  const [activeYear, setActiveYear] = useState("All");
+  // Card sizing for horizontal rows
+  const cardWidth = isMobile ? width * 0.34 : 160;
+  const cardHeight = cardWidth * 1.4;
 
-  const [animeList, setAnimeList] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasNext, setHasNext] = useState(false);
+  // ── Genre State ──
+  const [activeGenre, setActiveGenre] = useState("Action");
+  const [genreAnime, setGenreAnime] = useState([]);
+  const [genreLoading, setGenreLoading] = useState(true);
 
-  // Fetch data
-  const fetchData = useCallback(async (reset = false) => {
-    try {
-      if (reset) {
-        setLoading(true);
-        setPage(1);
-      }
-      const targetPage = reset ? 1 : page + 1;
+  // ── Master List (for Format / Status / Year filtering) ──
+  const [masterList, setMasterList] = useState([]);
+  const [masterLoading, setMasterLoading] = useState(true);
 
-      let endpoint = `/api/anime/popular?page=${targetPage}`;
-      if (activeGenre) {
-        const slug = activeGenre.toLowerCase().replace(/\s+/g, "-");
-        endpoint = `/api/anime/genre/${slug}?page=${targetPage}`;
-      }
+  // ── Format State ──
+  const [activeFormat, setActiveFormat] = useState("TV");
 
-      const res = await API.get(endpoint);
-      const results = res.data.results || res.data.episodes || [];
+  // ── Status State ──
+  const [activeStatus, setActiveStatus] = useState("Ongoing");
 
-      setAnimeList((prev) => reset ? results : [...prev, ...results]);
-      setHasNext(res.data.hasNextPage || results.length > 0); // Assuming if results>0 there might be more
-      if (!reset) setPage(targetPage);
+  // ── Year State ──
+  const [activeYear, setActiveYear] = useState(String(currentYear));
 
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeGenre, page]);
-
-  useEffect(() => {
-    fetchData(true);
-  }, [activeGenre]);
-
-  // Client-side filtering for Format, Status, Year
-  const filteredAnime = useMemo(() => {
-    return animeList.filter((item) => {
-      let match = true;
-      if (activeFormat !== "All") {
-        const category = (item.category || item.type || "").toLowerCase();
-        if (!category.includes(activeFormat.toLowerCase())) match = false;
-      }
-      if (activeStatus !== "All") {
-        const status = (item.status || "").toLowerCase();
-        if (activeStatus === "Ongoing" && !status.includes("ongoing")) match = false;
-        if (activeStatus === "Completed" && !status.includes("complete")) match = false;
-        if (activeStatus === "Upcoming" && !status.includes("upcoming")) match = false;
-      }
-      if (activeYear !== "All") {
-        const year = (item.premiered || item.seasonYear || item.releaseDate || "").toString();
-        if (!year.includes(activeYear)) match = false;
-      }
-      return match;
-    });
-  }, [animeList, activeFormat, activeStatus, activeYear]);
-
-  // Grid calculations
-  const gridColumns = width >= 1200 ? 6 : width >= 992 ? 5 : width >= 768 ? 4 : 2;
-  const gridGap = 10;
-  const gridCardWidth = (width - 32 - (gridColumns - 1) * gridGap) / gridColumns;
-  const gridCardHeight = gridCardWidth * 1.4;
-
+  // ── Navigation helper ──
   const navigateToDetails = useCallback((item) => {
     const id = item.slug || item.id;
     if (id) navigation.navigate("Details", { id, title: item.title });
   }, [navigation]);
 
-  const FilterRow = ({ title, options, activeValue, onSelect }) => (
-    <View style={styles.filterSection}>
-      <Text style={styles.filterTitle}>{title}</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
-      >
-        {options.map((opt) => {
-          const isActive = activeValue === opt;
-          return (
-            <TouchableOpacity
-              key={opt}
-              style={[styles.filterPill, isActive && styles.filterPillActive]}
-              onPress={() => onSelect(isActive && title === "Genres" ? null : opt)}
-            >
-              <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
-                {opt}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
+  // ── Fetch Genre anime from backend ──
+  useEffect(() => {
+    if (!activeGenre) {
+      setGenreAnime([]);
+      setGenreLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setGenreLoading(true);
+      try {
+        const slug = activeGenre.toLowerCase().replace(/\s+/g, "-");
+        const res = await API.get(`/api/anime/genre/${slug}?page=1`);
+        if (!cancelled) {
+          setGenreAnime(res.data.results || []);
+        }
+      } catch (err) {
+        console.error("[explore] genre fetch:", err.message);
+        if (!cancelled) setGenreAnime([]);
+      } finally {
+        if (!cancelled) setGenreLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeGenre]);
+
+  // ── Fetch Master List (popular anime, multiple pages) for client-side filters ──
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setMasterLoading(true);
+      try {
+        // Fetch 3 pages for a robust dataset
+        const pages = await Promise.all([
+          API.get("/api/anime/popular?page=1"),
+          API.get("/api/anime/popular?page=2"),
+          API.get("/api/anime/popular?page=3"),
+        ]);
+        const all = pages.flatMap(p => p.data.results || []);
+        // De-duplicate by slug/id
+        const seen = new Set();
+        const unique = all.filter(a => {
+          const key = a.slug || a.id;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        if (!cancelled) setMasterList(unique);
+      } catch (err) {
+        console.error("[explore] master list:", err.message);
+      } finally {
+        if (!cancelled) setMasterLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Client-side filtered lists ──
+  const formatAnime = masterList.filter((item) => {
+    if (!activeFormat) return false;
+    const cat = (item.category || item.type || "").toLowerCase();
+    return cat.includes(activeFormat.toLowerCase());
+  });
+
+  const statusAnime = masterList.filter((item) => {
+    if (!activeStatus) return false;
+    const st = (item.status || "").toLowerCase();
+    if (activeStatus === "Ongoing") return st.includes("ongoing") || st.includes("airing");
+    if (activeStatus === "Completed") return st.includes("complete") || st.includes("finished");
+    if (activeStatus === "Upcoming") return st.includes("upcoming") || st.includes("not yet");
+    return false;
+  });
+
+  const yearAnime = masterList.filter((item) => {
+    if (!activeYear) return false;
+    const y = (item.premiered || item.seasonYear || item.releaseDate || "").toString();
+    return y.includes(activeYear);
+  });
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* ── Header ── */}
+      {/* ── Fixed Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <LinearGradient
           colors={["rgba(8,8,9,0.98)", "rgba(8,8,9,0.85)", "rgba(8,8,9,0)"]}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.headerContent}>
-          <View style={styles.sectionAccent} />
+          <View style={styles.headerAccent} />
           <Text style={styles.headerTitle}>Explore</Text>
         </View>
       </View>
 
-      <FlatList
-        data={filteredAnime}
-        keyExtractor={(item, index) => `${item.slug || item.id}-${index}`}
-        numColumns={isMobile ? 2 : gridColumns}
-        key={isMobile ? "mobile" : "desktop"} // Force re-render on layout change
+      {/* ── Scrollable Content ── */}
+      <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingTop: 80 + insets.top,
-          paddingBottom: isMobile ? 110 + insets.bottom : 40 + insets.bottom,
-          paddingHorizontal: 16,
+          paddingTop: 70 + insets.top,
+          paddingBottom: isMobile ? 110 + insets.bottom : 40,
         }}
-        columnWrapperStyle={{ gap: gridGap, marginBottom: gridGap }}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <View style={styles.filtersContainer}>
-            <FilterRow title="Genres" options={GENRES} activeValue={activeGenre} onSelect={setActiveGenre} />
-            <FilterRow title="Format" options={FORMATS} activeValue={activeFormat} onSelect={setActiveFormat} />
-            <FilterRow title="Status" options={STATUSES} activeValue={activeStatus} onSelect={setActiveStatus} />
-            <FilterRow title="Release Year" options={YEARS} activeValue={activeYear} onSelect={setActiveYear} />
-            
-            {/* Header for Results */}
-            <View style={styles.resultsHeader}>
-              <Text style={styles.resultsTitle}>
-                {activeGenre || "Popular"} Anime {filteredAnime.length > 0 && `(${filteredAnime.length}+)`}
-              </Text>
-            </View>
-          </View>
-        }
-        renderItem={({ item, index }) => (
-          <AnimeCard
-            item={item}
-            cardWidth={gridCardWidth}
-            cardHeight={gridCardHeight}
-            onPress={navigateToDetails}
-            index={index}
-            inGrid={true}
-            containerStyle={{ marginLeft: 0, marginBottom: 0 }}
-          />
-        )}
-        ListEmptyComponent={
-          loading ? (
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: gridGap }}>
-              {Array.from({ length: 10 }).map((_, i) => (
-                <View key={i} style={{ width: gridCardWidth, height: gridCardHeight, backgroundColor: C.surface, borderRadius: 6, opacity: 0.5 }} />
-              ))}
-            </View>
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="search" size={48} color={C.dim} />
-              <Text style={styles.emptyText}>No anime found matching these filters.</Text>
-            </View>
-          )
-        }
-        onEndReached={() => {
-          if (hasNext && !loading) fetchData(false);
-        }}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          loading && animeList.length > 0 ? (
-            <View style={{ padding: 20, alignItems: "center" }}>
-              <Text style={{ color: C.dim }}>Loading more...</Text>
-            </View>
-          ) : null
-        }
-      />
+      >
+        {/* GENRES SECTION */}
+        <ExploreSection
+          title="Genres"
+          icon="flame-outline"
+          pills={GENRES}
+          activePill={activeGenre}
+          onPillSelect={setActiveGenre}
+          anime={genreAnime}
+          loading={genreLoading}
+          onPressAnime={navigateToDetails}
+          cardWidth={cardWidth}
+          cardHeight={cardHeight}
+        />
+
+        {/* FORMAT SECTION */}
+        <ExploreSection
+          title="Format"
+          icon="tv-outline"
+          pills={FORMATS}
+          activePill={activeFormat}
+          onPillSelect={setActiveFormat}
+          anime={formatAnime}
+          loading={masterLoading}
+          onPressAnime={navigateToDetails}
+          cardWidth={cardWidth}
+          cardHeight={cardHeight}
+        />
+
+        {/* STATUS SECTION */}
+        <ExploreSection
+          title="Status"
+          icon="radio-button-on-outline"
+          pills={STATUSES}
+          activePill={activeStatus}
+          onPillSelect={setActiveStatus}
+          anime={statusAnime}
+          loading={masterLoading}
+          onPressAnime={navigateToDetails}
+          cardWidth={cardWidth}
+          cardHeight={cardHeight}
+        />
+
+        {/* YEAR SECTION */}
+        <ExploreSection
+          title="Release Year"
+          icon="calendar-outline"
+          pills={YEARS}
+          activePill={activeYear}
+          onPillSelect={setActiveYear}
+          anime={yearAnime}
+          loading={masterLoading}
+          onPressAnime={navigateToDetails}
+          cardWidth={cardWidth}
+          cardHeight={cardHeight}
+        />
+      </ScrollView>
     </View>
   );
 }
@@ -250,35 +352,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  headerTitle: {
-    color: C.white,
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-  },
-  sectionAccent: {
+  headerAccent: {
     width: 4,
     height: 20,
     borderRadius: 2,
     backgroundColor: C.crimson,
     marginRight: 10,
   },
-  filtersContainer: {
-    marginBottom: 16,
-    marginHorizontal: -16, // to bleed edges for horizontal scroll
-  },
-  filterSection: {
-    marginBottom: 16,
-  },
-  filterTitle: {
+  headerTitle: {
     color: C.white,
-    fontSize: 14,
-    fontWeight: "700",
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.4,
   },
+  // ── Sections ──
+  section: {
+    marginBottom: 28,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  sectionAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+    backgroundColor: C.crimson,
+    marginRight: 8,
+  },
+  sectionTitle: {
+    color: C.white,
+    fontSize: 17,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+  // ── Filter Pills ──
   filterPill: {
     backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 20,
@@ -300,26 +410,14 @@ const styles = StyleSheet.create({
     color: C.white,
     fontWeight: "800",
   },
-  resultsHeader: {
+  // ── Empty ──
+  emptyRow: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.05)",
-  },
-  resultsTitle: {
-    color: C.white,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  emptyContainer: {
+    paddingVertical: 24,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
   },
-  emptyText: {
+  emptyRowText: {
     color: C.dim,
-    marginTop: 12,
-    fontSize: 14,
+    fontSize: 13,
   },
 });
