@@ -106,62 +106,28 @@ function SkeletonDetails({ shimmerX, width }) {
 const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isActive, progressPercent }) {
   const scale   = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-  const slideY  = useRef(new Animated.Value(16)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1, duration: 280,
-        delay: Math.min(index, 20) * 30,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideY, {
-        toValue: 0,
-        delay: Math.min(index, 20) * 30,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    Animated.timing(opacity, {
+      toValue: 1, duration: 200, delay: Math.min(index, 20) * 10, useNativeDriver: true,
+    }).start();
   }, []);
 
-  const onPressIn  = useCallback(() =>
-    Animated.spring(scale, { toValue: 0.92, tension: 140, friction: 7, useNativeDriver: true }).start(), []);
-  const onPressOut = useCallback(() =>
-    Animated.spring(scale, { toValue: 1, tension: 140, friction: 7, useNativeDriver: true }).start(), []);
-
-
-
   return (
-    <Animated.View style={[styles.episodeCardWrap, { opacity, transform: [{ translateY: slideY }, { scale }] }]}>
+    <Animated.View style={[styles.episodeCardWrap, { opacity, transform: [{ scale }] }]}>
       <TouchableOpacity
-        style={[styles.episodeCard, isActive && styles.episodeCardActive]}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
+        style={[styles.episodeSquare, isActive && styles.episodeSquareActive]}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.9, useNativeDriver: true }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()}
         onPress={() => onPress(item, index)}
-        activeOpacity={1}
+        activeOpacity={0.8}
       >
-        {isActive && <View style={styles.episodeCardGlow} />}
-        
-        <View style={styles.episodeLeft}>
-          <Text style={[styles.episodeNumber, isActive && styles.episodeNumberActive]}>
-            {item.number}
-          </Text>
-        </View>
-
-        <View style={styles.episodeMain}>
-          <Text style={[styles.episodeTitle, isActive && styles.episodeTitleActive]} numberOfLines={2}>
-            {item.title || `Episode ${item.number}`}
-          </Text>
-        </View>
-
-        <View style={styles.episodeActions}>
-          <View style={[styles.episodePlayIcon, isActive && styles.episodePlayIconActive]}>
-            <Ionicons name={isActive ? "pause" : "play"} size={14} color="white" />
-          </View>
-        </View>
-        
+        <Text style={[styles.episodeSquareText, isActive && styles.episodeSquareTextActive]}>
+          {item.number}
+        </Text>
         {progressPercent > 0 && (
-          <View style={styles.episodeProgressBarBg}>
-            <View style={[styles.episodeProgressBarFill, { width: `${Math.min(100, progressPercent)}%` }]} />
+          <View style={styles.episodeSquareProgressBg}>
+            <View style={[styles.episodeSquareProgressFill, { height: `${Math.min(100, progressPercent)}%` }]} />
           </View>
         )}
       </TouchableOpacity>
@@ -861,8 +827,8 @@ export default function DetailsScreen({ route, navigation }) {
               data={activeRangeData}
               keyExtractor={episodeKeyExtractor}
               renderItem={renderEpisode}
-              numColumns={isDesktop ? 2 : 1}
-              key={isDesktop ? "desktop-grid" : "mobile-list"}
+              numColumns={isDesktop ? 10 : 5}
+              key={isDesktop ? "desktop-grid-10" : "mobile-grid-5"}
               scrollEnabled={false}
               removeClippedSubviews
               initialNumToRender={CHUNK_SIZE}
@@ -879,8 +845,8 @@ export default function DetailsScreen({ route, navigation }) {
 
           <CommentSection animeId={id} />
 
-          <AppFooter />
         </Animated.View>
+        <AppFooter />
       </Animated.ScrollView>
 
       {/* Skeleton / Loading overlay */}
@@ -1213,96 +1179,35 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  episodesGrid: { gap: 14 },
-  episodeCardWrap: { flex: 1, marginHorizontal: 2, marginVertical: 6 },
-  episodeCard: {
-    flexDirection: "row",
+  episodesGrid: { gap: 10, paddingHorizontal: 2, paddingVertical: 4 },
+  episodeCardWrap: { flex: 1, margin: 4, aspectRatio: 1, minWidth: 40 },
+  episodeSquare: {
+    flex: 1,
     backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    alignItems: "center",
-    gap: 16,
-    minHeight: 72,
-    overflow: "hidden",
-  },
-  episodeCardActive: {
-    borderColor: C.crimson,
-    backgroundColor: "rgba(220,20,60,0.09)",
-  },
-  episodeCardGlow: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: 4,
-    backgroundColor: C.crimson,
-  },
-  episodeLeft: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
   },
-  episodeNumber: {
+  episodeSquareActive: {
+    borderColor: C.crimson,
+    backgroundColor: "rgba(220,20,60,0.15)",
+  },
+  episodeSquareText: {
     color: C.dim,
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: -0.2,
+    fontSize: 16,
+    fontWeight: "800",
   },
-  episodeNumberActive: {
+  episodeSquareTextActive: {
     color: C.crimson,
   },
-  episodeMain: {
-    flex: 1,
+  episodeSquareProgressBg: {
+    position: "absolute", bottom: 0, left: 0, right: 0, height: 4, backgroundColor: "rgba(255,255,255,0.05)",
   },
-  episodeTitle: {
-    color: C.white,
-    fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 20,
-    opacity: 0.8,
-    letterSpacing: -0.1,
-  },
-  episodeTitleActive: {
-    color: C.white,
-    opacity: 1,
-  },
-  episodePlayIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.04)",
-  },
-  episodePlayIconActive: {
-    backgroundColor: C.crimson,
-    borderColor: C.crimson,
-  },
-
-  // Episode progress bar
-  episodeProgressBarBg: {
-    position: "absolute",
-    bottom: 0, left: 0, right: 0,
-    height: 3,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    overflow: "hidden",
-  },
-  episodeProgressBarFill: {
-    height: 3,
-    backgroundColor: C.crimson,
-    borderBottomLeftRadius: 16,
+  episodeSquareProgressFill: {
+    width: "100%", position: "absolute", bottom: 0, backgroundColor: C.crimson,
   },
 
   rangeSelector: { paddingBottom: 16, gap: 10 },

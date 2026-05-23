@@ -180,11 +180,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     padding: 10,
-    gap: 12,
     justifyContent: "center",
   },
   card: {
     marginBottom: 20,
+    marginHorizontal: 6,
   },
   imagePlaceholder: {
     backgroundColor: "rgba(255,255,255,0.04)",

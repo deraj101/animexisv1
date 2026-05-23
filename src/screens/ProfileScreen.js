@@ -851,8 +851,8 @@ export default function ProfileScreen({ navigation }) {
             </Section>
           </Animated.View>
 
-          <AppFooter />
         </View>
+        <AppFooter />
       </Animated.ScrollView>
 
       <Modal
