@@ -15,15 +15,19 @@ export function AuthProvider({ children }) {
         const stored = await AsyncStorage.getItem("auth_user");
         if (stored) {
           const parsed = JSON.parse(stored);
+
           setUser(parsed); // 🟢 Set the user state immediately so the app shows the Home screen
 
           // 🔄 Re-fetch fresh profile data on every launch to sync subscription status
           try {
             const res = await API.get(`/api/users/public-profile/${parsed.email}`);
             if (res.data.success && res.data.profile) {
-              const freshData = { ...parsed, ...res.data.profile };
-              setUser(freshData);
-              await AsyncStorage.setItem("auth_user", JSON.stringify(freshData));
+              setUser((prev) => {
+                if (!prev) return null;
+                const freshData = { ...prev, ...res.data.profile };
+                AsyncStorage.setItem("auth_user", JSON.stringify(freshData)).catch(() => {});
+                return freshData;
+              });
             }
           } catch { 
              /* server unreachable — stay with the stored session */ 
@@ -81,9 +85,13 @@ export function AuthProvider({ children }) {
     try {
       const res = await API.get(`/api/users/public-profile/${user.email}`);
       if (res.data.success && res.data.profile) {
-        const freshData = { ...user, ...res.data.profile };
-        setUser(freshData);
-        await AsyncStorage.setItem("auth_user", JSON.stringify(freshData));
+        let freshData;
+        setUser((prev) => {
+          if (!prev) return null;
+          freshData = { ...prev, ...res.data.profile };
+          AsyncStorage.setItem("auth_user", JSON.stringify(freshData)).catch(() => {});
+          return freshData;
+        });
         return freshData;
       }
     } catch (err) {

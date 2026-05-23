@@ -4,7 +4,7 @@
  * The shared footer with A-Z selection and Legal links.
  */
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { C } from "../theme";
@@ -22,12 +22,14 @@ const LINKS = [
 export default function AppFooter() {
   const [legalPage, setLegalPage] = useState(null);
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
   return (
     <>
-      <View style={styles.footer}>
+      <View style={[styles.footer, isDesktop && { gap: 8, paddingBottom: 16, paddingTop: 12 }]}>
         {/* A-Z List Searching */}
-        <View style={styles.alphabetSection}>
+        <View style={[styles.alphabetSection, isDesktop && { paddingBottom: 12, marginBottom: 8 }]}>
            <Text style={styles.alphabetLabel}>A-Z LIST Searching</Text>
            <View style={styles.alphabetRow}>
               {ALPHABET.map((char) => (
@@ -72,8 +74,10 @@ export default function AppFooter() {
         {/* Copyright */}
         <Text style={styles.copy}>© 2026 Animexis. All rights reserved.</Text>
 
-        {/* Filler to cover ScrollView padding gap */}
-        <View style={{ position: 'absolute', top: '100%', left: 0, right: 0, height: 400, backgroundColor: C.surface }} />
+        {/* Filler to cover ScrollView padding gap (Native only to prevent scroll bloat on Web) */}
+        {Platform.OS !== 'web' && (
+          <View style={{ position: 'absolute', top: '100%', left: 0, right: 0, height: 400, backgroundColor: C.surface }} />
+        )}
       </View>
 
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />
@@ -171,9 +175,9 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   copy: {
-    color: C.dimmer,
-    fontSize: 11,
-    opacity: 0.6,
+    color: C.dim,
+    fontSize: 12,
+    opacity: 1,
     marginTop: 4,
   },
 });
