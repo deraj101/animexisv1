@@ -823,19 +823,21 @@ export default function DetailsScreen({ route, navigation }) {
           )}
 
           {episodes.length > 0 ? (
-            <FlatList
-              data={activeRangeData}
-              keyExtractor={episodeKeyExtractor}
-              renderItem={renderEpisode}
-              numColumns={isDesktop ? 10 : 5}
-              key={isDesktop ? "desktop-grid-10" : "mobile-grid-5"}
-              scrollEnabled={false}
-              removeClippedSubviews
-              initialNumToRender={CHUNK_SIZE}
-              maxToRenderPerBatch={CHUNK_SIZE}
-              windowSize={3}
-              contentContainerStyle={styles.episodesGrid}
-            />
+            <View style={styles.episodesCardContainer}>
+              <FlatList
+                data={activeRangeData}
+                keyExtractor={episodeKeyExtractor}
+                renderItem={renderEpisode}
+                numColumns={isDesktop ? 10 : 5}
+                key={isDesktop ? "desktop-grid-10" : "mobile-grid-5"}
+                scrollEnabled={false}
+                removeClippedSubviews
+                initialNumToRender={CHUNK_SIZE}
+                maxToRenderPerBatch={CHUNK_SIZE}
+                windowSize={3}
+                contentContainerStyle={styles.episodesGrid}
+              />
+            </View>
           ) : (
             <View style={styles.noEpisodesContainer}>
               <Ionicons name="film-outline" size={32} color={C.dimmer} />
@@ -1179,6 +1181,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
+  episodesCardContainer: {
+    backgroundColor: "rgba(255,255,255,0.02)",
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 16,
+    padding: 12,
+  },
   episodesGrid: { gap: 10, paddingHorizontal: 2, paddingVertical: 4 },
   episodeCardWrap: { flex: 1, margin: 4, aspectRatio: 1, minWidth: 40 },
   episodeSquare: {
