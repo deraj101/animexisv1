@@ -62,7 +62,8 @@ const ADS = [
   },
 ];
 const DOWNLOADS_ENABLED = process.env.EXPO_PUBLIC_ENABLE_DOWNLOADS !== 'false';
-const VIDEO_PROXY_ENABLED = process.env.EXPO_PUBLIC_USE_VIDEO_PROXY === 'true';
+const VIDEO_PROXY_ENABLED = process.env.EXPO_PUBLIC_USE_VIDEO_PROXY !== 'false';
+const WEB_PLAYER_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation";
 
 // ─── FORMAT TIME ─────────────────────────────────────────────────────────────
 const fmtTime = (secs) => {
@@ -71,6 +72,28 @@ const fmtTime = (secs) => {
   const r = s % 60;
   return `${m}:${r.toString().padStart(2, "0")}`;
 };
+
+const isHlsUrl = (url) => String(url || "").toLowerCase().includes(".m3u8");
+
+const loadHlsJs = () => new Promise((resolve, reject) => {
+  if (typeof window === "undefined") return reject(new Error("HLS is only available on web."));
+  if (window.Hls) return resolve(window.Hls);
+
+  const existing = document.querySelector('script[data-animexis-hls="true"]');
+  if (existing) {
+    existing.addEventListener("load", () => resolve(window.Hls), { once: true });
+    existing.addEventListener("error", reject, { once: true });
+    return;
+  }
+
+  const script = document.createElement("script");
+  script.src = "https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js";
+  script.async = true;
+  script.dataset.animexisHls = "true";
+  script.onload = () => resolve(window.Hls);
+  script.onerror = () => reject(new Error("Failed to load HLS player."));
+  document.head.appendChild(script);
+});
 
 // ─── COUNTDOWN RING ───────────────────────────────────────────────────────────
 const RING_SIZE = 52;
@@ -279,6 +302,108 @@ function AdOverlay({ onAdFinished }) {
 // ─── PLAYER CONTROLS OVERLAY ─────────────────────────────────────────────────
 // Fades in on tap, auto-hides after AUTO_HIDE_MS of inactivity.
 // ─── PLAYER SCREEN ────────────────────────────────────────────────────────────
+function WebDirectVideo({ uri, style, shouldPlay, onLoad, onError, onStatusUpdate }) {
+  const webVideoRef = useRef(null);
+
+  useEffect(() => {
+    const video = webVideoRef.current;
+    if (!video || !uri) return undefined;
+
+    let hls;
+    let cancelled = false;
+
+    const attach = async () => {
+      try {
+        if (isHlsUrl(uri) && !video.canPlayType("application/vnd.apple.mpegurl")) {
+          const Hls = await loadHlsJs();
+          if (cancelled) return;
+          if (!Hls.isSupported()) throw new Error("HLS is not supported in this browser.");
+
+          hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+          hls.loadSource(uri);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (data?.fatal) onError?.(data);
+          });
+        } else {
+          video.src = uri;
+        }
+
+        if (shouldPlay) video.play().catch(() => {});
+      } catch (error) {
+        onError?.(error);
+      }
+    };
+
+    attach();
+
+    return () => {
+      cancelled = true;
+      if (hls) hls.destroy();
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [uri, shouldPlay, onError]);
+
+  useEffect(() => {
+    const video = webVideoRef.current;
+    if (!video) return undefined;
+
+    const emitStatus = () => {
+      onStatusUpdate?.({
+        isLoaded: Number.isFinite(video.duration) && video.duration > 0,
+        isPlaying: !video.paused && !video.ended,
+        durationMillis: Number.isFinite(video.duration) ? video.duration * 1000 : 0,
+        positionMillis: Number.isFinite(video.currentTime) ? video.currentTime * 1000 : 0,
+        didJustFinish: video.ended,
+      });
+    };
+
+    const handleLoaded = () => {
+      onLoad?.();
+      emitStatus();
+    };
+
+    video.addEventListener("loadedmetadata", handleLoaded);
+    video.addEventListener("timeupdate", emitStatus);
+    video.addEventListener("play", emitStatus);
+    video.addEventListener("pause", emitStatus);
+    video.addEventListener("ended", emitStatus);
+    video.addEventListener("error", onError);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", handleLoaded);
+      video.removeEventListener("timeupdate", emitStatus);
+      video.removeEventListener("play", emitStatus);
+      video.removeEventListener("pause", emitStatus);
+      video.removeEventListener("ended", emitStatus);
+      video.removeEventListener("error", onError);
+    };
+  }, [onLoad, onError, onStatusUpdate]);
+
+  useEffect(() => {
+    const video = webVideoRef.current;
+    if (!video) return;
+    if (shouldPlay) video.play().catch(() => {});
+    else video.pause();
+  }, [shouldPlay]);
+
+  return (
+    <video
+      ref={webVideoRef}
+      controls
+      playsInline
+      style={{
+        width: "100%",
+        height: "100%",
+        backgroundColor: "#000",
+        objectFit: "contain",
+        ...style,
+      }}
+    />
+  );
+}
+
 export default function PlayerScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { video, title, animeTitle, episodeNumber, episodeTitle, episodeData, animeId, animeImage, isOffline } = route.params;
@@ -314,9 +439,11 @@ export default function PlayerScreen({ route, navigation }) {
     const checkDownloads = async () => {
       const list = await DownloadService.getDownloads();
       const map = {};
-      list.filter(d => String(d.animeId) === String(animeId)).forEach(d => {
-        map[d.episodeNumber] = true;
-      });
+      for (const item of list.filter(d => String(d.animeId) === String(animeId))) {
+        if (!(await DownloadService.isBroken(item))) {
+          map[item.episodeNumber] = true;
+        }
+      }
       setDownloadedEps(map);
     };
     if (animeId) checkDownloads();
@@ -538,6 +665,9 @@ export default function PlayerScreen({ route, navigation }) {
 
   const buildStreamUrl = (rawUrl) => {
     if (Platform.OS === "web" && VIDEO_PROXY_ENABLED) {
+      if (isHlsUrl(rawUrl)) {
+        return `${process.env.EXPO_PUBLIC_API_URL}/api/anime/hls?url=${encodeURIComponent(rawUrl)}&token=${user?.token || ''}`;
+      }
       return `${process.env.EXPO_PUBLIC_API_URL}/api/anime/stream?url=${encodeURIComponent(rawUrl)}&token=${user?.token || ''}`;
     }
     return rawUrl;
@@ -562,8 +692,15 @@ export default function PlayerScreen({ route, navigation }) {
       videoUrl: videoSrc?.url || videoSrc
     });
 
-    // On Web, prioritize iframes/embeds due to strict CORS and HLS proxying limitations.
+    // On Web, prefer resolved direct streams to avoid third-party embed popup ads.
     if (Platform.OS === "web") {
+      if (videoSrc) {
+        const url = buildStreamUrl(videoSrc.url || videoSrc);
+        console.log("[Player] Web: Using direct video proxy:", url);
+        setUseWebView(false);
+        setVideoUrl(url);
+        return;
+      }
       if (epData?.iframe || embedSrc) {
         const url = epData.iframe || embedSrc?.url || embedSrc;
         console.log("[Player] 🌐 Web: Using WebView for embed:", url);
@@ -895,6 +1032,54 @@ export default function PlayerScreen({ route, navigation }) {
     </View>
   );
 
+  const handlePlaybackStatusUpdate = useCallback((status) => {
+    if (status.isLoaded && status.durationMillis > 0) {
+      if (status.isPlaying && !isPlayingRef.current) {
+        isPlayingRef.current = true;
+        lastPlayStartRef.current = Date.now();
+      } else if (!status.isPlaying && isPlayingRef.current) {
+        isPlayingRef.current = false;
+        if (lastPlayStartRef.current) {
+          totalWatchTimeRef.current += (Date.now() - lastPlayStartRef.current);
+          lastPlayStartRef.current = null;
+        }
+      }
+
+      const posSec = status.positionMillis / 1000;
+      const durSec = status.durationMillis / 1000;
+      playbackRef.current = { position: posSec, duration: durSec };
+
+      const now = Date.now();
+      if (user?.email && animeId && now - lastSyncRef.current > 15000) {
+        lastSyncRef.current = now;
+        API.post("/api/anime/continue-watching", {
+          email: user.email,
+          animeId,
+          title: animeTitle || "Unknown Anime",
+          image: animeImage || "",
+          episodeUrl: currentEpisodeUrl,
+          episodeNumber: String(currentEpisodeNumber || "1"),
+          progress: Math.round(posSec),
+          duration: Math.round(durSec),
+        }).catch(() => {});
+      }
+
+      const isNearlyFinished =
+        status.positionMillis >= status.durationMillis * 0.98 ||
+        (status.durationMillis - status.positionMillis) < 20000;
+
+      if ((status.didJustFinish || isNearlyFinished) && !wasFinishedRef.current) {
+        wasFinishedRef.current = true;
+        console.log("[Player] Episode finished (threshold reached). Cleaning up...");
+        if (user?.email && animeId) {
+          API.delete("/api/anime/continue-watching", {
+            data: { email: user.email, animeId }
+          }).catch(() => { });
+        }
+      }
+    }
+  }, [animeId, animeImage, animeTitle, currentEpisodeNumber, currentEpisodeUrl, user?.email]);
+
   const renderPlayerBody = () => {
     if (error) {
       return (
@@ -938,6 +1123,8 @@ export default function PlayerScreen({ route, navigation }) {
               src={webViewUrl}
               style={{ width: "100%", height: "100%", border: "none", backgroundColor: "#000" }}
               allow="autoplay; fullscreen; encrypted-media"
+              sandbox={WEB_PLAYER_SANDBOX}
+              referrerPolicy="no-referrer"
               allowFullScreen
               title="Video Player"
               onLoad={() => setPlayerLoading(false)}
@@ -955,6 +1142,15 @@ export default function PlayerScreen({ route, navigation }) {
               onError={() => { setPlayerLoading(false); handleVideoError(); }}
             />
           )
+        ) : videoUrl && Platform.OS === "web" ? (
+          <WebDirectVideo
+            uri={videoUrl}
+            style={styles.video}
+            shouldPlay={!showAd}
+            onLoad={() => setPlayerLoading(false)}
+            onStatusUpdate={handlePlaybackStatusUpdate}
+            onError={handleVideoError}
+          />
         ) : videoUrl ? (
           <Video
             ref={videoRef}

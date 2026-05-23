@@ -79,8 +79,6 @@ class DownloadService {
         const fileName = `${safeAnimeId}_ep${episode.number}.${fileExt}`;
         const fileUri = DOWNLOAD_DIR + fileName;
 
-        // Track time for smooth unknown-size estimation
-        const downloadStartTime = Date.now();
         let lastProgressUpdate = 0;
 
         const callback = (downloadProgress) => {
@@ -156,14 +154,27 @@ class DownloadService {
         this.activeDownloads.set(requestId, downloadResumable);
 
         try {
-            const { uri } = await downloadResumable.downloadAsync();
+            const result = await downloadResumable.downloadAsync();
+            const { uri, status, headers = {} } = result || {};
+            const contentType = String(headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
+
+            if (!uri || (status && (status < 200 || status >= 300))) {
+                await this._deleteIfExists(uri);
+                throw new Error(`Download failed: server returned ${status || 'an invalid response'}.`);
+            }
+
+            if (contentType.includes('application/json') || contentType.includes('text/html')) {
+                await this._deleteIfExists(uri);
+                throw new Error("Download failed: the server returned an error page instead of a video file.");
+            }
+
             // Brief 100% update so UI shows completion before the alert
             if (onProgress) onProgress({ progress: 1, written: 0, expected: 0, isUnknown: false });
             
             // 🚀 NEW: Verify file size
             const fileInfo = await FileSystem.getInfoAsync(uri);
             if (!fileInfo.exists || fileInfo.size < 100 * 1024) { // Less than 100KB
-                await FileSystem.deleteAsync(uri, { idempotent: true });
+                await this._deleteIfExists(uri);
                 throw new Error("Download failed: The file is too small or invalid. This usually happens when the source is protected or a playlist (HLS).");
             }
 
@@ -221,6 +232,13 @@ class DownloadService {
 
     _isOwnApiUrl(url) {
         return !!url && !!API_BASE_URL && url.startsWith(API_BASE_URL);
+    }
+
+    async _deleteIfExists(uri) {
+        if (!uri) return;
+        try {
+            await FileSystem.deleteAsync(uri, { idempotent: true });
+        } catch {}
     }
 
     async isBroken(item) {

@@ -59,10 +59,12 @@ const AD_BLOCK_SCRIPT = `
 true;
 `;
 
+const WEB_PLAYER_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation";
+
 let WebViewComponent;
 
 if (Platform.OS === 'web') {
-  // Web: plain iframe, NO sandbox so embed players work fully
+  // Web: sandboxed iframe blocks popups/top-page redirects while keeping playback usable.
   WebViewComponent = function WebIframe({ source, style, onLoadStart, onLoadEnd, onError }) {
     const iframeRef = React.useRef(null);
 
@@ -91,6 +93,8 @@ if (Platform.OS === 'web') {
           ...style,
         }}
         allow="autoplay; fullscreen; encrypted-media"
+        sandbox={WEB_PLAYER_SANDBOX}
+        referrerPolicy="no-referrer"
         allowFullScreen
       />
     );

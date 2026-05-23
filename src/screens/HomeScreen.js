@@ -1805,7 +1805,7 @@ export default function HomeScreen({ navigation }) {
         ) : null}
 
         {/* ── GENRES ── */}
-        {genres.length > 0 && (
+        {width >= 768 && genres.length > 0 && (
           <View style={styles.genresSection}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionAccent} />

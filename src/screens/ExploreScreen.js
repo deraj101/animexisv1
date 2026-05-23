@@ -14,6 +14,7 @@ import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import API from "../services/api";
 import AnimeCard from "../components/AnimeCard";
+import AppFooter from "../components/AppFooter";
 
 const C = {
   bg: "#080809",
@@ -332,6 +333,8 @@ export default function ExploreScreen({ navigation }) {
           cardWidth={cardWidth}
           cardHeight={cardHeight}
         />
+
+        <AppFooter />
       </ScrollView>
     </View>
   );

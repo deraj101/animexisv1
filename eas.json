@@ -7,6 +7,7 @@
       "channel": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://animexis-n413.onrender.com",
+        "EXPO_PUBLIC_USE_VIDEO_PROXY": "true",
         "EXPO_PUBLIC_STRIPE_PREMIUM_PRICE_ID": "price_1TIQ9NJLQ1NgFh3O3bohGS4t"
       },
       "android": {
@@ -17,6 +18,7 @@
       "channel": "preview",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://animexis-n413.onrender.com",
+        "EXPO_PUBLIC_USE_VIDEO_PROXY": "true",
         "EXPO_PUBLIC_STRIPE_PREMIUM_PRICE_ID": "price_1TIQ9NJLQ1NgFh3O3bohGS4t"
       },
       "android": {
