@@ -71,6 +71,9 @@ export default function AppFooter() {
 
         {/* Copyright */}
         <Text style={styles.copy}>© 2026 Animexis. All rights reserved.</Text>
+
+        {/* Filler to cover ScrollView padding gap */}
+        <View style={{ position: 'absolute', top: '100%', left: 0, right: 0, height: 400, backgroundColor: C.surface }} />
       </View>
 
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />

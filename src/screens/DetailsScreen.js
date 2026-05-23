@@ -117,6 +117,7 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isAc
     <Animated.View style={[styles.episodeCardWrap, { opacity, transform: [{ scale }] }]}>
       <TouchableOpacity
         style={[styles.episodeSquare, isActive && styles.episodeSquareActive]}
+        delayPressIn={150}
         onPressIn={() => Animated.spring(scale, { toValue: 0.9, useNativeDriver: true }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()}
         onPress={() => onPress(item, index)}

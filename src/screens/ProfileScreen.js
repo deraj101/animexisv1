@@ -544,7 +544,7 @@ export default function ProfileScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 0 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 110 }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true }
