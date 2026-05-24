@@ -1,0 +1,14 @@
+
+> animexisv1@1.0.0 web
+> expo start --web --port 8082
+
+env: load .env
+env: export EXPO_PUBLIC_API_URL EXPO_PUBLIC_USE_VIDEO_PROXY EXPO_PUBLIC_STRIPE_PREMIUM_PRICE_ID
+Starting project at D:\Desktop\animexis-api\animexisv1
+React Compiler enabled
+Starting Metro Bundler
+Waiting on http://localhost:8082
+Logs for your project will appear below.
+Web node_modules\expo\AppEntry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 69.9% (760/909)
+Web Bundled 3169ms node_modules\expo\AppEntry.js (1300 modules)
+ LOG  [web] Logs will appear in the browser console

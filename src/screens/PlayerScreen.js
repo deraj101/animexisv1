@@ -755,7 +755,7 @@ export default function PlayerScreen({ route, navigation }) {
     
     // If native playback fails, fall back to the actual HTML iframe player in WebView
     const fallbackUrl = currentEpisodeData?.iframe || currentEpisodeUrl;
-    if (Platform.OS !== "web" && fallbackUrl) {
+    if (fallbackUrl) {
       console.log("[Player] Falling back to WebView for embed iframe:", fallbackUrl);
       setUseWebView(true);
       setWebViewUrl(fallbackUrl);
