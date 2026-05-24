@@ -20,6 +20,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { C } from "../theme";
 import { Image } from "expo-image";
@@ -145,6 +146,7 @@ const Section = ({ title, children }) => (
 // ─── PROFILE SCREEN ───────────────────────────────────────────────────────────
 export default function ProfileScreen({ navigation }) {
   const { user, signOut, updateUser, refreshSession } = useAuth();
+  const insets = useSafeAreaInsets();
 
   // Avatar
   const [avatarUri, setAvatarUri] = useState(user?.profile_image || null);
@@ -544,7 +546,7 @@ export default function ProfileScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 110 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: (width < 768 ? 78 : 24) + insets.bottom }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true }

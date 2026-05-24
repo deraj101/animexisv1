@@ -559,6 +559,7 @@ export default function HomeScreen({ navigation }) {
   const [searchPage, setSearchPage] = useState(1);
   const [searchHasNext, setSearchHasNext] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [submittedSearch, setSubmittedSearch] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // 📱 Mobile Search State
   const [dailyUsage, setDailyUsage] = useState(null); // { count, limit, subscription }
@@ -918,8 +919,21 @@ export default function HomeScreen({ navigation }) {
   }, [idleSuggestions, localSuggestionPools, searchActive, searchHistory.length]);
 
   const searchAnime = useCallback(async (text, activePage = 1) => {
-    if (!text || text.length < 2) return;
-    if (lastSearchRef.current.query === text && lastSearchRef.current.page === activePage) {
+    const trimmed = text.trim();
+    if (!trimmed || trimmed.length < 2) return;
+    const normalized = normalizeSearchKey(trimmed);
+    const isNewSearch = activePage === 1 && normalizeSearchKey(lastSearchRef.current.query || "") !== normalized;
+    setSubmittedSearch(trimmed);
+    setError(null);
+    if (isNewSearch) {
+      setAnime([]);
+      setSearchHasNext(false);
+      setSearchPage(1);
+      if (scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({ y: 0, animated: true });
+      }
+    }
+    if (lastSearchRef.current.query === trimmed && lastSearchRef.current.page === activePage) {
       setAnime(lastSearchRef.current.results);
       setSearchHasNext(lastSearchRef.current.hasNextPage);
       setSearchPage(activePage);
@@ -930,11 +944,10 @@ export default function HomeScreen({ navigation }) {
     if (searchAbortRef.current) searchAbortRef.current.abort();
     searchAbortRef.current = new AbortController();
     setSearchLoading(true);
-    const normalized = normalizeSearchKey(text);
     const storageKey = `${SEARCH_RESULT_CACHE_PREFIX}${normalized}:${activePage}`;
     const applyResults = (data) => {
       const results = dedupeAnimeItems(data?.results || []);
-      lastSearchRef.current = { query: text, results, page: activePage, hasNextPage: data?.hasNextPage };
+      lastSearchRef.current = { query: trimmed, results, page: activePage, hasNextPage: data?.hasNextPage };
       setAnime(results);
       setSearchHasNext(data?.hasNextPage);
       setSearchPage(activePage);
@@ -956,7 +969,7 @@ export default function HomeScreen({ navigation }) {
 
       const res = await API.get("/api/anime/search", {
         params: {
-          q: text,
+          q: trimmed,
           page: activePage,
           email: user?.email || "",
         },
@@ -1085,6 +1098,7 @@ export default function HomeScreen({ navigation }) {
     setAnime([]);
     setSearchPage(1);
     setSearchHasNext(false);
+    setSubmittedSearch("");
     setSuggestions([]);
     setShowSuggestions(false);
     lastSearchRef.current = { query: "", results: [], page: 1, hasNextPage: false };
@@ -1102,6 +1116,7 @@ export default function HomeScreen({ navigation }) {
     setAnime([]);
     setSearchPage(1);
     setSearchHasNext(false);
+    setSubmittedSearch("");
     setSuggestions([]);
     setShowSuggestions(false);
     setMobileSearchOpen(false);
@@ -1169,6 +1184,7 @@ export default function HomeScreen({ navigation }) {
                     value={query}
                     onChangeText={(text) => {
                       setQuery(text);
+                      if (text.trim() !== submittedSearch) setSubmittedSearch("");
                       setShowSuggestions(true);
                       if (!text) {
                         setAnime([]);
@@ -1352,6 +1368,7 @@ export default function HomeScreen({ navigation }) {
                 value={query}
                 onChangeText={(text) => {
                   setQuery(text);
+                  if (text.trim() !== submittedSearch) setSubmittedSearch("");
                   setShowSuggestions(true);
                   if (!text) {
                     setAnime([]);
@@ -1444,7 +1461,7 @@ export default function HomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingTop: 84 + insets.top,
-          paddingBottom: (width < 768 ? 92 : 24) + insets.bottom,
+          paddingBottom: (width < 768 ? 78 : 24) + insets.bottom,
           flexGrow: 1
         }}
         onScroll={Animated.event(
@@ -1465,7 +1482,7 @@ export default function HomeScreen({ navigation }) {
         )}
 
         {/* ── HERO SPOTLIGHT CAROUSEL ── */}
-        {spotlight.length > 0 && anime.length === 0 && (
+        {spotlight.length > 0 && anime.length === 0 && !submittedSearch && (
           <View style={[styles.heroContainer, { height: heroHeight, width: width - 32, alignSelf: 'center' }]}>
             <FlatList
               ref={heroFlatListRef}
@@ -1628,7 +1645,7 @@ export default function HomeScreen({ navigation }) {
         )}
 
         {/* ── SECTIONS / SKELETON ── */}
-        {sectionsLoading ? (
+        {sectionsLoading && !submittedSearch ? (
           <>
             {serverWaking && (
               <View style={styles.wakeNotice}>
@@ -1640,6 +1657,14 @@ export default function HomeScreen({ navigation }) {
             <SkeletonSection title="Ongoing Series" cardWidth={gridCardWidth} cardHeight={gridCardHeight} shimmerX={shimmerX} count={5} />
             <SkeletonSection title="Trending" cardWidth={gridCardWidth} cardHeight={gridCardHeight} shimmerX={shimmerX} count={5} />
           </>
+        ) : searchLoading && submittedSearch.length >= 2 && anime.length === 0 ? (
+          <View style={[styles.section, styles.searchLoadingState]}>
+            <DotCircleLoader size={44} color={C.crimson} />
+            <Text style={styles.searchLoadingTitle}>Searching anime</Text>
+            <Text style={styles.searchLoadingSub} numberOfLines={1}>
+              Looking for "{submittedSearch}"
+            </Text>
+          </View>
         ) : anime.length > 0 ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -1711,6 +1736,14 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
               )}
             </View>
+          </View>
+        ) : submittedSearch.length >= 2 ? (
+          <View style={styles.noResults}>
+            <View style={styles.noResultsIcon}>
+              <Ionicons name="search-outline" size={36} color={C.crimson} />
+            </View>
+            <Text style={styles.noResultsText}>No results for "{submittedSearch}"</Text>
+            <Text style={styles.noResultsSub}>Try a different spelling</Text>
           </View>
         ) : recent.length > 0 || trending.length > 0 || ongoing.length > 0 || schedule.length > 0 || continueWatching.length > 0 ? (
           <>
@@ -1835,16 +1868,6 @@ export default function HomeScreen({ navigation }) {
                 );
               })}
             </View>
-          </View>
-        )}
-
-        {activeData.length === 0 && anime.length === 0 && query.length >= 3 && !showSuggestions && (
-          <View style={styles.noResults}>
-            <View style={styles.noResultsIcon}>
-              <Ionicons name="search-outline" size={36} color={C.crimson} />
-            </View>
-            <Text style={styles.noResultsText}>No results for "{query}"</Text>
-            <Text style={styles.noResultsSub}>Try a different spelling</Text>
           </View>
         )}
 
@@ -2178,6 +2201,24 @@ const styles = StyleSheet.create({
   },
   noResultsText: { color: C.white, fontSize: 16, fontWeight: "600" },
   noResultsSub: { color: C.dim, fontSize: 13 },
+  searchLoadingState: {
+    minHeight: 280,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 28,
+  },
+  searchLoadingTitle: {
+    color: C.white,
+    fontSize: 17,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  searchLoadingSub: {
+    color: C.dim,
+    fontSize: 13,
+    maxWidth: "100%",
+  },
 
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -274,7 +274,7 @@ export default function ExploreScreen({ navigation }) {
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingTop: 60 + insets.top,
-          paddingBottom: isMobile ? 92 + insets.bottom : 40,
+          paddingBottom: (width < 768 ? 78 : 24) + insets.bottom,
         }}
         showsVerticalScrollIndicator={false}
       >

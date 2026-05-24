@@ -103,7 +103,7 @@ function SkeletonDetails({ shimmerX, width }) {
 }
 
 // ─── ANIMATED EPISODE CARD ────────────────────────────────────────────────────
-const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isActive, progressPercent }) {
+const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isActive, progressPercent, style }) {
   const scale   = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -114,7 +114,7 @@ const EpisodeCard = React.memo(function EpisodeCard({ item, index, onPress, isAc
   }, []);
 
   return (
-    <Animated.View style={[styles.episodeCardWrap, { opacity, transform: [{ scale }] }]}>
+    <Animated.View style={[styles.episodeCardWrap, style, { opacity, transform: [{ scale }] }]}>
       <TouchableOpacity
         style={[styles.episodeSquare, isActive && styles.episodeSquareActive]}
         delayPressIn={150}
@@ -465,6 +465,7 @@ export default function DetailsScreen({ route, navigation }) {
         onPress={handleEpisodePress}
         isActive={activeEpIndex === index}
         progressPercent={progressPercent}
+        style={{ maxWidth: width >= 992 ? '9.5%' : '19%' }}
       />
     );
   }, [handleEpisodePress, activeEpIndex, episodeProgress]);
@@ -561,7 +562,7 @@ export default function DetailsScreen({ route, navigation }) {
       <Animated.ScrollView
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: (width < 768 ? 110 : 40) + insets.bottom }]}
+        contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: (width < 768 ? 78 : 24) + insets.bottom }]}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true }

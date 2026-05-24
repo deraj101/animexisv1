@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { C } from "../theme";
@@ -9,6 +9,7 @@ import AppFooter from "../components/AppFooter";
 
 export default function LibraryScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { user } = useAuth();
 
   const libraryItems = [
@@ -25,7 +26,7 @@ export default function LibraryScreen({ navigation }) {
       </View>
 
       <ScrollView 
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 88 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: (width < 768 ? 78 : 24) + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
         {!user ? (

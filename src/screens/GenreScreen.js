@@ -196,7 +196,7 @@ export default function GenreScreen({ route, navigation }) {
           renderItem={renderItem}
           numColumns={cols}
           key={cols}
-          contentContainerStyle={[styles.grid, { paddingTop: 100 + insets.top, paddingBottom: 24 + insets.bottom }]}
+          contentContainerStyle={[styles.grid, { paddingTop: 100 + insets.top, paddingBottom: (width < 768 ? 78 : 24) + insets.bottom }]}
           ListEmptyComponent={renderEmpty}
           ListFooterComponent={renderFooter}
           onEndReached={handleLoadMore}

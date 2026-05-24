@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { BlurView } from "expo-blur";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import API from "../services/api";
 import { C } from "../theme";
 import AppFooter from "../components/AppFooter";
@@ -33,6 +34,7 @@ const getCardDimensions = (width) => {
 export default function AlphabetScreen({ route, navigation }) {
   const { letter } = route.params;
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [results,  setResults]  = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -132,7 +134,7 @@ export default function AlphabetScreen({ route, navigation }) {
           )}
           numColumns={cols}
           key={cols}
-          contentContainerStyle={styles.grid}
+          contentContainerStyle={[styles.grid, { paddingBottom: (width < 768 ? 78 : 24) + insets.bottom }]}
           ListFooterComponent={renderFooter}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.4}

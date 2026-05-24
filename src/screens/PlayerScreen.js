@@ -966,24 +966,40 @@ export default function PlayerScreen({ route, navigation }) {
         </TouchableOpacity>
 
         {sourceMenuOpen && (
-          <View style={styles.sourceDropdownMenu}>
-            {availableSources.map((src, idx) => {
-              const isActive = selectedSource?.url === src.url && selectedSource?.label === src.label;
-              return (
-                <TouchableOpacity
-                  key={`${src.label}-${idx}`}
-                  style={[styles.sourceDropdownItem, isActive && styles.sourceDropdownItemActive]}
-                  onPress={() => handleSourceSelect(src)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.sourceDropdownItemText, isActive && styles.sourceDropdownItemTextActive]} numberOfLines={1}>
-                    {src.label}
-                  </Text>
-                  {isActive && <Ionicons name="checkmark" size={16} color="#facc15" />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <Modal
+            visible={sourceMenuOpen}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setSourceMenuOpen(false)}
+          >
+            <TouchableOpacity 
+              style={styles.dropdownModalOverlay} 
+              activeOpacity={1} 
+              onPress={() => setSourceMenuOpen(false)}
+            >
+              <TouchableOpacity activeOpacity={1} style={styles.dropdownModalContainer}>
+                <Text style={styles.dropdownModalTitle}>Select Server</Text>
+                <ScrollView style={{ maxHeight: 300, width: '100%' }} nestedScrollEnabled={true}>
+                  {availableSources.map((src, idx) => {
+                    const isActive = selectedSource?.url === src.url && selectedSource?.label === src.label;
+                    return (
+                      <TouchableOpacity
+                        key={`${src.label}-${idx}`}
+                        style={[styles.sourceDropdownItem, isActive && styles.sourceDropdownItemActive]}
+                        onPress={() => handleSourceSelect(src)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.sourceDropdownItemText, isActive && styles.sourceDropdownItemTextActive]} numberOfLines={1}>
+                          {src.label}
+                        </Text>
+                        {isActive && <Ionicons name="checkmark" size={16} color="#facc15" />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
         )}
       </View>
     );
@@ -1364,11 +1380,7 @@ export default function PlayerScreen({ route, navigation }) {
         </View>
       ) : (
         /* ── MOBILE VERTICAL STACKED CINEMATIC LAYOUT ── */
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          style={styles.mobileContainer}
-          contentContainerStyle={{ paddingBottom: insets.bottom + (width < 768 ? 110 : 24) }}
-        >
+        <View style={styles.mobileContainer}>
           <Animated.View style={{ width: playerWidth, height: finalPlayerHeight, position: "relative", backgroundColor: "#000", transform: [{ scale: cardScale }] }}>
             {renderPlayerBody()}
             {showAd && <AdOverlay onAdFinished={handleAdFinished} />}
@@ -1400,7 +1412,14 @@ export default function PlayerScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.mobileTabContentContainer}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.mobileTabScroll}
+            contentContainerStyle={[
+              styles.mobileTabContentContainer,
+              { paddingBottom: insets.bottom + (width < 768 ? 110 : 24) }
+            ]}
+          >
             {activeTab === "episodes" ? (
               <View style={styles.episodeListContainer}>
                 {episodes.map((ep) => {
@@ -1437,8 +1456,8 @@ export default function PlayerScreen({ route, navigation }) {
                 onCommentAdded={fetchCommentCount}
               />
             )}
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
       )}
     </Animated.View>
   );
@@ -1589,18 +1608,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  sourceDropdownMenu: {
-    position: "absolute",
-    top: 52,
-    left: 0,
-    right: 0,
+  dropdownModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  dropdownModalContainer: {
+    width: "100%",
+    maxWidth: 380,
     backgroundColor: "#151515",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
+    paddingVertical: 12,
     overflow: "hidden",
-    zIndex: 40,
     elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  dropdownModalTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+    marginBottom: 4,
   },
   sourceDropdownItem: {
     minHeight: 42,
@@ -1812,6 +1850,9 @@ const styles = StyleSheet.create({
   },
   mobileTabContentContainer: {
     padding: 16,
+  },
+  mobileTabScroll: {
+    flex: 1,
   },
 
   // ── Video Controls Overlay ──

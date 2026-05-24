@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import API, { BASE_URL } from "../services/api";
 import { C } from "../theme";
@@ -264,7 +265,7 @@ const ActivityRow = React.memo(function ActivityRow({ icon, color, title, sub, t
 // ─── USER ROW ─────────────────────────────────────────────────────────────────
 const UserRow = React.memo(function UserRow({
   email, name, joinedAgo, seenAgo, last, onToggleBypass, bypassed, isToggling,
-  subscription, onToggleSubscription, onDeleteUser, onEditUser
+  subscription, onToggleSubscription, onDeleteUser
 }) {
   const displayName = name || 'Unknown User';
   const letter = displayName[0]?.toUpperCase() || "?";
@@ -294,14 +295,6 @@ const UserRow = React.memo(function UserRow({
       </View>
 
       <View style={styles.userActions}>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => onEditUser({ email, name: name || '', subscription })}
-          hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
-        >
-          <Ionicons name="create-outline" size={15} color={C.white} />
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.actionBtn, bypassed && styles.actionBtnBypass]}
           onPress={() => onToggleBypass(email)}
@@ -348,61 +341,140 @@ const UserRow = React.memo(function UserRow({
 function SidebarLayout({ tabs, activeTab, setActiveTab, children }) {
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
-  const sidebarWidth = isWide ? 200 : 56;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const activeItem = tabs.find((tab) => tab.key === activeTab);
+
+  const handleTabPress = (key) => {
+    setActiveTab(key);
+    setMenuOpen(false);
+  };
+
+  const renderNavItems = (wideLabels = isWide) => (
+    tabs.map((tab) => {
+      const isActive = activeTab === tab.key;
+      return (
+        <TouchableOpacity
+          key={tab.key}
+          style={[
+            sidebarStyles.navItem,
+            isActive && sidebarStyles.navItemActive,
+            wideLabels && sidebarStyles.navItemFull,
+          ]}
+          onPress={() => handleTabPress(tab.key)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isActive }}
+        >
+          {isActive && <View style={sidebarStyles.navActiveBar} />}
+          <View style={[
+            sidebarStyles.navIconWrap,
+            isActive && sidebarStyles.navIconWrapActive,
+          ]}>
+            <Ionicons
+              name={isActive ? tab.icon.replace('-outline', '') : tab.icon}
+              size={18}
+              color={isActive ? C.crimson : C.dim}
+            />
+          </View>
+          {wideLabels && (
+            <Text
+              style={[
+                sidebarStyles.navLabel,
+                isActive && sidebarStyles.navLabelActive,
+              ]}
+              numberOfLines={1}
+            >
+              {tab.label}
+            </Text>
+          )}
+          {tab.badge ? (
+            <View style={[
+              sidebarStyles.navBadge,
+              tab.badgeColor && { backgroundColor: tab.badgeColor },
+              !wideLabels && sidebarStyles.navBadgeCompact,
+            ]}>
+              <Text style={sidebarStyles.navBadgeText}>{tab.badge}</Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      );
+    })
+  );
 
   return (
-    <View style={sidebarStyles.container}>
-      {/* Sidebar */}
-      <View style={[sidebarStyles.sidebar, { width: sidebarWidth }]}>  
-        <View style={sidebarStyles.sidebarInner}>
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={[
-                  sidebarStyles.navItem,
-                  isActive && sidebarStyles.navItemActive,
-                ]}
-                onPress={() => setActiveTab(tab.key)}
-                activeOpacity={0.7}
-              >
-                {isActive && <View style={sidebarStyles.navActiveBar} />}
-                <View style={[
-                  sidebarStyles.navIconWrap,
-                  isActive && sidebarStyles.navIconWrapActive,
-                ]}>
-                  <Ionicons
-                    name={isActive ? tab.icon.replace('-outline', '') : tab.icon}
-                    size={18}
-                    color={isActive ? C.crimson : C.dim}
-                  />
-                </View>
-                {isWide && (
-                  <Text
-                    style={[
-                      sidebarStyles.navLabel,
-                      isActive && sidebarStyles.navLabelActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {tab.label}
-                  </Text>
-                )}
-                {tab.badge ? (
-                  <View style={[
-                    sidebarStyles.navBadge,
-                    tab.badgeColor && { backgroundColor: tab.badgeColor },
-                    !isWide && sidebarStyles.navBadgeCompact,
-                  ]}>
-                    <Text style={sidebarStyles.navBadgeText}>{tab.badge}</Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-            );
-          })}
+    <View style={[sidebarStyles.container, !isWide && sidebarStyles.containerMobile]}>
+      {isWide ? (
+        <View style={[sidebarStyles.sidebar, { width: 200 }]}>  
+          <View style={sidebarStyles.sidebarInner}>
+            {renderNavItems(true)}
+          </View>
         </View>
-      </View>
+      ) : (
+        <>
+          <View style={sidebarStyles.mobileHeader}>
+            <TouchableOpacity
+              onPress={() => setMenuOpen(true)}
+              style={sidebarStyles.mobileMenuButton}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Open admin menu"
+            >
+              <Ionicons name="menu" size={22} color={C.white} />
+            </TouchableOpacity>
+            <View style={sidebarStyles.mobileHeaderText}>
+              <Text style={sidebarStyles.mobileEyebrow}>Admin menu</Text>
+              <Text style={sidebarStyles.mobileTitle} numberOfLines={1}>
+                {activeItem?.label || "Dashboard"}
+              </Text>
+            </View>
+            {activeItem?.badge ? (
+              <View style={[sidebarStyles.navBadge, activeItem.badgeColor && { backgroundColor: activeItem.badgeColor }]}>
+                <Text style={sidebarStyles.navBadgeText}>{activeItem.badge}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <Modal
+            visible={menuOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setMenuOpen(false)}
+          >
+            <View style={sidebarStyles.drawerOverlay}>
+              <TouchableOpacity
+                style={sidebarStyles.drawerScrim}
+                activeOpacity={1}
+                onPress={() => setMenuOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close admin menu"
+              />
+              <View style={sidebarStyles.drawer}>
+                <View style={sidebarStyles.drawerHeader}>
+                  <View>
+                    <Text style={sidebarStyles.mobileEyebrow}>Animexis</Text>
+                    <Text style={sidebarStyles.drawerTitle}>Admin Dashboard</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setMenuOpen(false)}
+                    style={sidebarStyles.drawerClose}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close admin menu"
+                  >
+                    <Ionicons name="close" size={20} color={C.white} />
+                  </TouchableOpacity>
+                </View>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={sidebarStyles.drawerList}
+                >
+                  {renderNavItems(true)}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+        </>
+      )}
 
       {/* Content */}
       <View style={sidebarStyles.content}>
@@ -416,6 +488,9 @@ const sidebarStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     minHeight: 400,
+  },
+  containerMobile: {
+    flexDirection: 'column',
   },
   sidebar: {
     backgroundColor: C.surface,
@@ -437,6 +512,9 @@ const sidebarStyles = StyleSheet.create({
     borderRadius: 10,
     position: 'relative',
     overflow: 'hidden',
+  },
+  navItemFull: {
+    minHeight: 50,
   },
   navItemActive: {
     backgroundColor: C.crimsonDim,
@@ -495,11 +573,100 @@ const sidebarStyles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  mobileHeader: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 2,
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  mobileMenuButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: C.surfaceHigh,
+    borderWidth: 1,
+    borderColor: C.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mobileHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mobileEyebrow: {
+    color: C.dimmer,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  mobileTitle: {
+    color: C.white,
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  drawerOverlay: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  drawerScrim: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  drawer: {
+    width: '82%',
+    maxWidth: 320,
+    height: '100%',
+    backgroundColor: C.bg,
+    borderRightWidth: 1,
+    borderRightColor: C.border,
+    paddingTop: Platform.OS === 'ios' ? 54 : 34,
+    paddingBottom: 18,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  drawerTitle: {
+    color: C.white,
+    fontSize: 17,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  drawerClose: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: C.surfaceHigh,
+    borderWidth: 1,
+    borderColor: C.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  drawerList: {
+    padding: 12,
+    gap: 4,
+  },
 });
 
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
 export default function AdminDashboardScreen({ navigation }) {
   const { user, signOut } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [loading,     setLoading]     = useState(true);
@@ -531,7 +698,6 @@ export default function AdminDashboardScreen({ navigation }) {
   const [modSearching, setModSearching] = useState(false);
   
   // UI States for Forms & Modals
-  const [userEditModal, setUserEditModal] = useState(null); // { email, name, subscription }
   const [animeModal, setAnimeModal] = useState(null); // { slug, title, ... }
   const [episodeModal, setEpisodeModal] = useState(null); // { animeId, title }
   const [episodeForm, setEpisodeForm] = useState({ number: "", title: "", videoUrl: "", thumbnail: "", _id: null });
@@ -1029,22 +1195,6 @@ export default function AdminDashboardScreen({ navigation }) {
     }
   };
 
-  const handleUpdateUser = async () => {
-    if (!userEditModal?.email) return;
-    try {
-      const cfg = { headers: await getAuthHeader() };
-      const res = await API.put(`/api/admin/users/${encodeURIComponent(userEditModal.email)}`, {
-        name: userEditModal.name,
-        subscription: userEditModal.subscription
-      }, cfg);
-      if (res.data.success) {
-        setRecentUsers(prev => prev.map(u => u.email === userEditModal.email ? { ...u, ...res.data.user } : u));
-        setUserEditModal(null);
-        Alert.alert("Success", "User updated.");
-      }
-    } catch (err) { Alert.alert("Error", err.message); }
-  };
-
   const handleSaveAnime = async (animeData) => {
     try {
       const cfg = { headers: await getAuthHeader() };
@@ -1359,7 +1509,10 @@ export default function AdminDashboardScreen({ navigation }) {
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 0 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: (width < 768 ? 78 : 24) + insets.bottom,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1537,17 +1690,23 @@ export default function AdminDashboardScreen({ navigation }) {
                   <Text style={styles.emptyText}>No activity yet.</Text>
                 ) : (
                   <>
-                    {activityLog.map((ev, i) => (
-                      <ActivityRow
-                        key={ev.id || i}
-                        icon={ev.icon}
-                        color={ev.color}
-                        title={ev.title}
-                        sub={ev.sub}
-                        time={ev.time}
-                        last={i === activityLog.length - 1}
-                      />
-                    ))}
+                    {activityLog.map((ev, i) => {
+                      const maskEmail = (t) => t ? t.replace(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi, (m) => {
+                        const [name, domain] = m.split('@');
+                        return `${name.substring(0, 3)}***@${domain}`;
+                      }) : t;
+                      return (
+                        <ActivityRow
+                          key={ev.id || i}
+                          icon={ev.icon}
+                          color={ev.color}
+                          title={maskEmail(ev.title)}
+                          sub={maskEmail(ev.sub)}
+                          time={ev.time}
+                          last={i === activityLog.length - 1}
+                        />
+                      );
+                    })}
                     
                     {hasMoreActivity && (
                       <TouchableOpacity 
@@ -1643,7 +1802,6 @@ export default function AdminDashboardScreen({ navigation }) {
                       subscription={u.subscription}
                       onToggleSubscription={handleToggleSubscription}
                       onDeleteUser={handleDeleteUser}
-                      onEditUser={(data) => setUserEditModal(data)}
                     />
                   ))
                 )}
@@ -2204,11 +2362,9 @@ export default function AdminDashboardScreen({ navigation }) {
 
           </SidebarLayout>
 
-          {/* ═══════════ FOOTER ═══════════ */}
-
-          <AppFooter />
-
         </Animated.View>
+
+        <AppFooter />
       </Animated.ScrollView>
 
       {/* ═══════════ REPLY MODAL ═══════════ */}
@@ -2257,49 +2413,6 @@ export default function AdminDashboardScreen({ navigation }) {
                   <Text style={styles.modalSubmitText}>Send Reply</Text>
                 </>
               )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ═══════════ USER EDIT MODAL ═══════════ */}
-      <Modal visible={!!userEditModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit User</Text>
-              <TouchableOpacity onPress={() => setUserEditModal(null)}>
-                <Ionicons name="close" size={24} color={C.dim} />
-              </TouchableOpacity>
-            </View>
-            <Text style={{ color: C.dim, marginBottom: 12 }}>{userEditModal?.email}</Text>
-            
-            <Text style={styles.inputLabel}>Display Name</Text>
-            <TextInput
-              style={[styles.modalInput, { minHeight: 44, paddingVertical: 10 }]}
-              value={userEditModal?.name}
-              onChangeText={t => setUserEditModal(p => ({ ...p, name: t }))}
-              placeholder="Display Name"
-              placeholderTextColor={C.dimmer}
-            />
-
-            <Text style={styles.inputLabel}>Subscription</Text>
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-              {['free', 'premium'].map(tier => (
-                <TouchableOpacity
-                  key={tier}
-                  style={[styles.tierOption, userEditModal?.subscription === tier && styles.tierOptionActive]}
-                  onPress={() => setUserEditModal(p => ({ ...p, subscription: tier }))}
-                >
-                  <Text style={[styles.tierOptionText, userEditModal?.subscription === tier && styles.tierOptionTextActive]}>
-                    {tier.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleUpdateUser}>
-              <Text style={styles.modalSubmitText}>Save Changes</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2520,6 +2633,7 @@ export default function AdminDashboardScreen({ navigation }) {
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
+  scrollContent: { flexGrow: 1, paddingBottom: 60 },
 
   liveCard: {
     marginHorizontal: 16, marginBottom: 14,
