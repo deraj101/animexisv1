@@ -1253,7 +1253,7 @@ export default function PlayerScreen({ route, navigation }) {
 
   // ── MAIN RENDER ──────────────────────────────────────────────────────────────
   return (
-    <Animated.View style={[styles.screen, { opacity: cardAnim }]}>
+    <Animated.View style={[styles.screen, { opacity: cardAnim, height: Platform.OS === 'web' ? height : '100%', overflow: 'hidden' }]}>
       <StatusBar hidden />
 
       {/* ── Sleek Fullscreen Top Navigation Bar ── */}
