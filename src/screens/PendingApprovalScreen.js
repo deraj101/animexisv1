@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Animated } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,22 +14,76 @@ const C = {
 };
 
 export default function PendingApprovalScreen() {
-  const { signOut, refreshSession } = useAuth();
+  const { signOut, checkApprovalStatus } = useAuth();
+  const [checking, setChecking] = useState(false);
+  const [rejected, setRejected] = useState(false);
+  
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [feedbackMsg, setFeedbackMsg] = useState("");
 
-  const handleRefresh = async () => {
-    const fresh = await refreshSession();
-    if (fresh?.account_status === 'active') {
-      // AuthContext.user update will trigger App.js navigation change
+  const showFeedback = (msg) => {
+    setFeedbackMsg(msg);
+    fadeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(3000),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })
+    ]).start();
+  };
+
+  const handleRefresh = async (isManual = false) => {
+    if (isManual) setChecking(true);
+    const fresh = await checkApprovalStatus();
+    if (isManual) setChecking(false);
+
+    if (fresh) {
+      if (fresh.account_status === 'suspended') {
+        setRejected(true);
+      } else if (fresh.account_status === 'pending' && isManual) {
+        showFeedback("Your account is still waiting for admin approval.");
+      }
+      // If active, AuthContext updates state and App.js navigates away automatically
+    } else if (isManual) {
+      showFeedback("Could not reach the server.");
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
-      handleRefresh();
+      handleRefresh(false);
     }, 5000); // Poll every 5 seconds
 
     return () => clearInterval(interval);
   }, []);
+
+  if (rejected) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <LinearGradient colors={["rgba(220,20,60,0.15)", "transparent"]} style={styles.gradient} />
+        <View style={styles.content}>
+          <View style={styles.iconCircle}>
+            <Ionicons name="close-circle-outline" size={60} color={C.crimson} />
+          </View>
+          <Text style={styles.title}>Account Rejected</Text>
+          <Text style={styles.desc}>
+            Unfortunately, your account application was not approved by our team.
+          </Text>
+          
+          <TouchableOpacity style={styles.refreshBtn} onPress={() => Linking.openURL("mailto:support@animexis.app")}>
+            <LinearGradient colors={[C.crimson, "#a00020"]} style={styles.btnGradient}>
+              <Ionicons name="mail-outline" size={20} color={C.white} />
+              <Text style={styles.btnText}>Contact Support</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.signOutBtn} onPress={signOut}>
+            <Text style={styles.signOutText}>Sign Out & Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -58,15 +112,25 @@ export default function PendingApprovalScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh}>
+        <TouchableOpacity 
+          style={styles.refreshBtn} 
+          onPress={() => handleRefresh(true)}
+          disabled={checking}
+        >
           <LinearGradient
             colors={[C.crimson, "#a00020"]}
             style={styles.btnGradient}
           >
-            <Ionicons name="refresh-outline" size={20} color={C.white} />
-            <Text style={styles.btnText}>Check Status</Text>
+            <Ionicons name="refresh-outline" size={20} color={C.white} style={checking ? { opacity: 0.5 } : {}} />
+            <Text style={styles.btnText}>{checking ? "Checking..." : "Check Status"}</Text>
           </LinearGradient>
         </TouchableOpacity>
+
+        <Animated.View style={{ opacity: fadeAnim, marginBottom: 15, height: 20 }}>
+          <Text style={{ color: C.crimson, fontSize: 13, fontWeight: "500", textAlign: "center" }}>
+            {feedbackMsg}
+          </Text>
+        </Animated.View>
 
         <TouchableOpacity style={styles.signOutBtn} onPress={signOut}>
           <Text style={styles.signOutText}>Sign Out</Text>

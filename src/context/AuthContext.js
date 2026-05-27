@@ -99,8 +99,37 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
+  /**
+   * checkApprovalStatus — Polls the secure /api/auth/status endpoint
+   * to check if the user has been approved, updating local state.
+   */
+  const checkApprovalStatus = useCallback(async () => {
+    if (!user?.email) return null;
+    try {
+      const res = await API.get('/api/auth/status');
+      if (res.data.success) {
+        let freshData;
+        setUser((prev) => {
+          if (!prev) return null;
+          freshData = { 
+            ...prev, 
+            account_status: res.data.account_status,
+            is_verified: res.data.is_verified,
+            subscription: res.data.subscription
+          };
+          AsyncStorage.setItem("auth_user", JSON.stringify(freshData)).catch(() => {});
+          return freshData;
+        });
+        return freshData;
+      }
+    } catch (err) {
+      console.error("[AuthContext] Approval check failed:", err.message);
+    }
+    return null;
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut, updateUser, refreshSession }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, updateUser, refreshSession, checkApprovalStatus }}>
       {children}
     </AuthContext.Provider>
   );

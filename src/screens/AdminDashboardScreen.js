@@ -21,6 +21,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import API, { BASE_URL } from "../services/api";
 import { C } from "../theme";
@@ -693,9 +694,6 @@ export default function AdminDashboardScreen({ navigation }) {
   const [subRequests, setSubRequests] = useState([]);
   const [blockedAnimes, setBlockedAnimes] = useState([]);
   const [blockSlug, setBlockSlug] = useState("");
-  const [modSearchQuery, setModSearchQuery] = useState("");
-  const [modSearchResults, setModSearchResults] = useState([]);
-  const [modSearching, setModSearching] = useState(false);
   
   // UI States for Forms & Modals
   const [animeModal, setAnimeModal] = useState(null); // { slug, title, ... }
@@ -721,6 +719,72 @@ export default function AdminDashboardScreen({ navigation }) {
   const [fetchingFanart, setFetchingFanart] = useState(false);
   const [systemSettings, setSystemSettings] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [animeModalEpisodes, setAnimeModalEpisodes] = useState([]);
+  const [animeModalEpForm, setAnimeModalEpForm] = useState({ number: '', title: '', videoUrl: '' });
+
+  const handleUploadFile = async (target) => {
+    // target: 'image' | 'episodeVideo' | 'animeModalVideo'
+    const isVideo = target === 'episodeVideo' || target === 'animeModalVideo';
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: isVideo ? ['videos'] : ['images'],
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setUploadingFile(true);
+        const asset = result.assets[0];
+        
+        const formData = new FormData();
+        if (Platform.OS === 'web') {
+           formData.append('file', asset.file || { uri: asset.uri, name: asset.fileName || 'upload', type: asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg') });
+        } else {
+           formData.append('file', {
+             uri: asset.uri,
+             name: asset.fileName || asset.uri.split('/').pop() || 'upload',
+             type: asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg')
+           });
+        }
+
+        const authHeader = await getAuthHeader();
+        const res = await fetch(`${BASE_URL}/api/admin/upload`, {
+          method: 'POST',
+          headers: {
+            Authorization: authHeader.Authorization,
+          },
+          body: formData,
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          const fullUrl = `${BASE_URL}${data.url}`;
+          if (target === 'episodeVideo') {
+            setEpisodeForm(p => ({ ...p, videoUrl: fullUrl }));
+          } else if (target === 'animeModalVideo') {
+            setAnimeModalEpForm(p => ({ ...p, videoUrl: fullUrl }));
+          } else {
+            setAnimeModal(p => ({ ...p, image: fullUrl }));
+          }
+          const msg = 'File uploaded successfully!';
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('Success', msg);
+        } else {
+          const msg = data.error || 'Failed to upload file';
+          if (Platform.OS === 'web') window.alert('Upload Error: ' + msg);
+          else Alert.alert('Upload Error', msg);
+        }
+      }
+    } catch (err) {
+      console.log('Upload error:', err);
+      const msg = 'Failed to upload file: ' + err.message;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -1030,19 +1094,6 @@ export default function AdminDashboardScreen({ navigation }) {
     }
   };
 
-  // Debounced Search for Moderation
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (modSearchQuery.length >= 3) {
-        handleModSearch();
-      } else if (modSearchQuery.length === 0) {
-        setModSearchResults([]);
-      }
-    }, 600);
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [modSearchQuery]);
-
   // Debounced Search for CMS
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -1055,20 +1106,6 @@ export default function AdminDashboardScreen({ navigation }) {
 
     return () => clearTimeout(delayDebounceFn);
   }, [cmsSearchQuery]);
-
-  const handleModSearch = async () => {
-    if (!modSearchQuery.trim()) return;
-    setModSearching(true);
-    try {
-      const cfg = { headers: await getAuthHeader() };
-      const res = await API.get(`/api/admin/search-global?q=${encodeURIComponent(modSearchQuery)}`, cfg);
-      setModSearchResults(res.data.results || []);
-    } catch (err) {
-      Alert.alert("Error", "Search failed.");
-    } finally {
-      setModSearching(false);
-    }
-  };
 
   const handleSignOut = useCallback(() => signOut(), [signOut]);
 
@@ -1206,15 +1243,33 @@ export default function AdminDashboardScreen({ navigation }) {
       }
 
       if (res.data.success) {
+        const savedAnime = res.data.anime;
         if (animeData._id) {
-          setCustomAnimes(prev => prev.map(a => a._id === animeData._id ? res.data.anime : a));
+          setCustomAnimes(prev => prev.map(a => a._id === animeData._id ? savedAnime : a));
         } else {
-          setCustomAnimes(prev => [res.data.anime, ...prev]);
+          setCustomAnimes(prev => [savedAnime, ...prev]);
+        }
+        // If there are pending episodes to add, save them now
+        if (animeModalEpisodes && animeModalEpisodes.length > 0) {
+          for (const ep of animeModalEpisodes) {
+            try {
+              await API.post("/api/admin/episodes", { ...ep, animeId: savedAnime.slug }, cfg);
+            } catch (epErr) {
+              console.log('Episode save error:', epErr.message);
+            }
+          }
         }
         setAnimeModal(null);
-        Alert.alert("Success", "Anime saved.");
+        setAnimeModalEpisodes([]);
+        setAnimeModalEpForm({ number: '', title: '', videoUrl: '' });
+        if (Platform.OS === 'web') window.alert('Anime saved successfully!');
+        else Alert.alert('Success', 'Anime saved.');
       }
-    } catch (err) { Alert.alert("Error", err.message); }
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message;
+      if (Platform.OS === 'web') window.alert('Error: ' + msg);
+      else Alert.alert('Error', msg);
+    }
   };
 
   const handleDeleteAnime = async (id, title) => {
@@ -1480,7 +1535,6 @@ export default function AdminDashboardScreen({ navigation }) {
     { key: "subscriptions", label: "Payments", icon: "cash-outline",
       badge: subRequests.length > 0 ? subRequests.length : null, badgeColor: "#22c55e" },
     { key: "cms", label: "Content", icon: "film-outline" },
-    { key: "moderation", label: "Moderation", icon: "ban-outline" },
     { key: "comments", label: "Comments", icon: "chatbox-ellipses-outline" },
     { key: "announcements", label: "Announce", icon: "megaphone-outline" },
     { key: "feedbacks", label: "Feedback", icon: "help-buoy-outline" },
@@ -1901,8 +1955,9 @@ export default function AdminDashboardScreen({ navigation }) {
           {/* ═══════════ CMS TAB (ANIME) ═══════════ */}
           {activeTab === "cms" && (
             <View style={styles.body}>
+              <SectionHeader title="Find Anime" icon="search-outline" />
               <View style={[styles.panel, { padding: 16, marginBottom: 20, zIndex: 20 }]}>
-                <Text style={{ color: C.dim, fontSize: 13, marginBottom: 12 }}>Search global database to import new anime.</Text>
+                <Text style={{ color: C.dim, fontSize: 13, marginBottom: 12 }}>Search database to add new anime or delete them from the system.</Text>
                 <View style={{ zIndex: 25, flexDirection: 'row', gap: 10 }}>
                   <TextInput
                     style={[styles.modalInput, { flex: 1, minHeight: 40, padding: 12, marginBottom: 0 }]}
@@ -1921,14 +1976,20 @@ export default function AdminDashboardScreen({ navigation }) {
                 </View>
 
                 {cmsSearchResults.length > 0 && (
-                  <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: C.border, maxHeight: 200 }}>
-                    <ScrollView nestedScrollEnabled>
+                  <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: C.border, maxHeight: 250 }}>
+                    <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
                       {cmsSearchResults.map((item, i) => (
-                        <View key={item.slug || i} style={{ flexDirection: 'row', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: C.border }}>
-                          <Text style={{ flex: 1, color: C.white, fontSize: 13 }} numberOfLines={1}>{item.title}</Text>
-                          <TouchableOpacity style={[styles.addBtn, { height: 28, paddingHorizontal: 12 }]} onPress={() => { handleImportAnime(item); setCmsSearchQuery(""); setCmsSearchResults([]); }}>
-                            <Text style={[styles.addBtnText, { fontSize: 11 }]}>Import</Text>
-                          </TouchableOpacity>
+                        <View key={item.slug || i} style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: C.border }}>
+                          <Text style={{ flex: 1, color: C.white, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
+                          <View style={{ flexDirection: 'row', gap: 8 }}>
+                            <TouchableOpacity style={[styles.addBtn, { height: 28, paddingHorizontal: 12 }]} onPress={() => { handleImportAnime(item); setCmsSearchQuery(""); setCmsSearchResults([]); }}>
+                              <Text style={[styles.addBtnText, { fontSize: 11 }]}>Add</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.addBtn, { height: 28, paddingHorizontal: 12, backgroundColor: 'transparent', borderWidth: 1, borderColor: C.crimson }]} onPress={() => { handleBlockAnime(item.slug, item.title); setCmsSearchQuery(""); setCmsSearchResults([]); }}>
+                              <Ionicons name="trash-outline" size={12} color={C.crimson} style={{ marginRight: 4 }} />
+                              <Text style={[styles.addBtnText, { fontSize: 11, color: C.crimson }]}>Delete</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       ))}
                     </ScrollView>
@@ -1937,7 +1998,7 @@ export default function AdminDashboardScreen({ navigation }) {
               </View>
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <SectionHeader title={`Custom Anime (${customAnimes.length})`} icon="film-outline" />
+                <SectionHeader title={`Anime (${customAnimes.length})`} icon="film-outline" />
                 <TouchableOpacity 
                   style={styles.addBtn}
                   onPress={() => setAnimeModal({ title: "", slug: "", description: "", image: "", banner: "", titleLogo: "", tvdbId: "", releaseDate: "", status: "Ongoing", genres: [], type: "TV" })}
@@ -1949,7 +2010,7 @@ export default function AdminDashboardScreen({ navigation }) {
               
               <View style={styles.panel}>
                 {customAnimes.length === 0 ? (
-                  <Text style={styles.emptyText}>No custom anime added yet.</Text>
+                  <Text style={styles.emptyText}>No anime added yet.</Text>
                 ) : (
                   customAnimes.map((anime, i) => (
                     <View key={anime.slug || i} style={[styles.actRow, i < customAnimes.length - 1 && styles.actRowBorder]}>
@@ -1991,6 +2052,31 @@ export default function AdminDashboardScreen({ navigation }) {
                   ))
                 )}
               </View>
+
+              <SectionHeader title={`Deleted Anime (${blockedAnimes.length})`} icon="trash-outline" />
+              <View style={[styles.panel, { marginBottom: 20 }]}>
+                {blockedAnimes.length === 0 ? (
+                  <Text style={styles.emptyText}>No anime deleted yet.</Text>
+                ) : (
+                  blockedAnimes.map((b, i) => (
+                    <View key={b.slug || i} style={[styles.actRow, i < blockedAnimes.length - 1 && styles.actRowBorder]}>
+                      <View style={[styles.actIconWrap, { backgroundColor: 'rgba(220,20,60,0.1)', borderColor: 'rgba(220,20,60,0.3)' }]}>
+                        <Ionicons name="trash" size={16} color={C.crimson} />
+                      </View>
+                      <View style={styles.actInfo}>
+                        <Text style={styles.actTitle}>{b.title || b.slug}</Text>
+                        <Text style={styles.actSub}>Slug: {b.slug}</Text>
+                      </View>
+                      <TouchableOpacity 
+                        style={[styles.miniActionBtn, { borderColor: 'rgba(34,197,94,0.3)' }]}
+                        onPress={() => handleUnblockAnime(b.slug)}
+                      >
+                        <Ionicons name="refresh-outline" size={14} color="#22c55e" />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
             </View>
           )}
 
@@ -2019,105 +2105,6 @@ export default function AdminDashboardScreen({ navigation }) {
                         activeOpacity={0.7}
                       >
                          <Ionicons name="trash-outline" size={16} color={C.crimson} />
-                      </TouchableOpacity>
-                    </View>
-                  ))
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* ═══════════ MODERATION TAB ═══════════ */}
-          {activeTab === "moderation" && (
-            <View style={styles.body}>
-              <SectionHeader title="Find Content to Block" icon="search-outline" />
-              <View style={[styles.panel, { padding: 16, marginBottom: 20 }]}>
-                <Text style={{ color: C.dim, fontSize: 13, marginBottom: 12 }}>
-                  Search for any anime globally to block it from the platform.
-                </Text>
-                <View style={{ zIndex: 10 }}>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <TextInput
-                      style={[styles.modalInput, { flex: 1, minHeight: 40, padding: 12, marginBottom: 0 }]}
-                      placeholder="Search anime title..."
-                      placeholderTextColor={C.dimmer}
-                      value={modSearchQuery}
-                      onChangeText={setModSearchQuery}
-                    />
-                    <TouchableOpacity 
-                      style={[styles.modalSubmitBtn, { width: 60, marginTop: 0 }]} 
-                      onPress={handleModSearch}
-                      disabled={modSearching}
-                    >
-                      {modSearching ? <ActivityIndicator size="small" color={C.white} /> : <Ionicons name="search" size={18} color={C.white} />}
-                    </TouchableOpacity>
-                  </View>
-
-                  {modSearchResults.length > 0 && (
-                    <View style={{ 
-                      marginTop: 4, 
-                      backgroundColor: 'rgba(25,25,25,0.98)', 
-                      borderRadius: 12, 
-                      borderWidth: 1, 
-                      borderColor: C.border,
-                      maxHeight: 250,
-                      overflow: 'hidden',
-                      shadowColor: "#000",
-                      shadowOffset: { width: 0, height: 10 },
-                      shadowOpacity: 0.5,
-                      shadowRadius: 15,
-                      elevation: 10
-                    }}>
-                      <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                        {modSearchResults.map((item, i) => (
-                          <TouchableOpacity 
-                            key={item.slug || i} 
-                            style={{ 
-                              flexDirection: 'row', 
-                              alignItems: 'center', 
-                              justifyContent: 'space-between', 
-                              padding: 12,
-                              borderBottomWidth: i < modSearchResults.length - 1 ? 1 : 0,
-                              borderBottomColor: 'rgba(255,255,255,0.05)'
-                            }}
-                            onPress={() => {
-                              handleBlockAnime(item.slug, item.title);
-                              setModSearchQuery("");
-                              setModSearchResults([]);
-                            }}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={{ color: C.white, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
-                              <Text style={{ color: C.dimmer, fontSize: 11 }}>{item.slug}</Text>
-                            </View>
-                            <Ionicons name="ban-outline" size={16} color={C.crimson} />
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              <SectionHeader title={`Blocked Content (${blockedAnimes.length})`} icon="list-outline" />
-              <View style={styles.panel}>
-                {blockedAnimes.length === 0 ? (
-                  <Text style={styles.emptyText}>No anime blocked yet.</Text>
-                ) : (
-                  blockedAnimes.map((b, i) => (
-                    <View key={b.slug || i} style={[styles.actRow, i < blockedAnimes.length - 1 && styles.actRowBorder]}>
-                      <View style={[styles.actIconWrap, { backgroundColor: 'rgba(220,20,60,0.1)', borderColor: 'rgba(220,20,60,0.3)' }]}>
-                        <Ionicons name="ban" size={16} color={C.crimson} />
-                      </View>
-                      <View style={styles.actInfo}>
-                        <Text style={styles.actTitle}>{b.title || b.slug}</Text>
-                        <Text style={styles.actSub}>Slug: {b.slug}</Text>
-                      </View>
-                      <TouchableOpacity 
-                        style={[styles.miniActionBtn, { borderColor: 'rgba(34,197,94,0.3)' }]}
-                        onPress={() => handleUnblockAnime(b.slug)}
-                      >
-                        <Ionicons name="refresh-outline" size={14} color="#22c55e" />
                       </TouchableOpacity>
                     </View>
                   ))
@@ -2440,7 +2427,17 @@ export default function AdminDashboardScreen({ navigation }) {
               <TextInput style={[styles.simpleInput, { height: 80 }]} multiline value={animeModal?.description || ""} onChangeText={t => setAnimeModal(p => ({ ...p, description: t }))} />
               
               <Text style={styles.inputLabel}>Poster Image URL</Text>
-              <TextInput style={styles.simpleInput} value={animeModal?.image || ""} onChangeText={t => setAnimeModal(p => ({ ...p, image: t }))} />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TextInput style={[styles.simpleInput, { flex: 1, marginBottom: 0 }]} value={animeModal?.image || ""} onChangeText={t => setAnimeModal(p => ({ ...p, image: t }))} />
+                <TouchableOpacity 
+                  style={[styles.addBtn, { backgroundColor: 'rgba(75,163,255,0.1)', borderColor: '#4ba3ff' }]} 
+                  onPress={() => handleUploadFile('image')}
+                  disabled={uploadingFile}
+                >
+                  {uploadingFile ? <ActivityIndicator size="small" color="#4ba3ff" /> : <Text style={[styles.addBtnText, { color: '#4ba3ff' }]}>Upload</Text>}
+                </TouchableOpacity>
+              </View>
+              <View style={{ height: 15 }} />
               
               <Text style={styles.inputLabel}>Banner Background URL</Text>
               <TextInput style={styles.simpleInput} value={animeModal?.banner || ""} onChangeText={t => setAnimeModal(p => ({ ...p, banner: t }))} placeholder="High-res wide image" placeholderTextColor={C.dimmer} />
@@ -2515,6 +2512,90 @@ export default function AdminDashboardScreen({ navigation }) {
                 placeholderTextColor={C.dimmer}
               />
 
+              {/* ── Episodes Section ── */}
+              <View style={{ marginTop: 20, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 15 }}>
+                <Text style={{ color: C.white, fontWeight: '700', fontSize: 15, marginBottom: 12 }}>
+                  <Ionicons name="videocam-outline" size={16} color={C.crimson} /> Episodes
+                </Text>
+                
+                <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 10, marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                    <TextInput 
+                      style={[styles.simpleInput, { flex: 0.3, marginBottom: 0 }]} 
+                      placeholder="No." placeholderTextColor={C.dimmer} keyboardType="numeric"
+                      onChangeText={v => setAnimeModalEpForm(p => ({ ...p, number: v }))}
+                      value={(animeModalEpForm.number || '').toString()}
+                    />
+                    <TextInput 
+                      style={[styles.simpleInput, { flex: 0.7, marginBottom: 0 }]} 
+                      placeholder="Episode Title" placeholderTextColor={C.dimmer}
+                      onChangeText={v => setAnimeModalEpForm(p => ({ ...p, title: v }))}
+                      value={animeModalEpForm.title || ''}
+                    />
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
+                    <TextInput 
+                      style={[styles.simpleInput, { flex: 1, marginBottom: 0 }]} 
+                      placeholder="Video URL (mp4, m3u8, etc)" placeholderTextColor={C.dimmer}
+                      onChangeText={v => setAnimeModalEpForm(p => ({ ...p, videoUrl: v }))}
+                      value={animeModalEpForm.videoUrl || ''}
+                    />
+                    <TouchableOpacity 
+                      style={[styles.addBtn, { backgroundColor: 'rgba(75,163,255,0.1)', borderColor: '#4ba3ff', height: 44, paddingHorizontal: 10 }]} 
+                      onPress={() => handleUploadFile('video')}
+                      disabled={uploadingFile}
+                    >
+                      {uploadingFile ? <ActivityIndicator size="small" color="#4ba3ff" /> : <Ionicons name="cloud-upload-outline" size={18} color="#4ba3ff" />}
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity 
+                    style={[styles.addBtn, { alignSelf: 'flex-start' }]} 
+                    onPress={() => {
+                      if (!animeModalEpForm.number || !animeModalEpForm.videoUrl) {
+                        if (Platform.OS === 'web') window.alert('Episode number and video URL are required.');
+                        else Alert.alert('Error', 'Episode number and video URL are required.');
+                        return;
+                      }
+                      setAnimeModalEpisodes(prev => [...prev, { ...animeModalEpForm, number: parseInt(animeModalEpForm.number) }]);
+                      setAnimeModalEpForm({ number: '', title: '', videoUrl: '' });
+                    }}
+                  >
+                    <Ionicons name="add" size={16} color={C.white} />
+                    <Text style={styles.addBtnText}>Add Episode</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {animeModalEpisodes.length > 0 && (
+                  <View style={{ marginBottom: 10 }}>
+                    {animeModalEpisodes.map((ep, i) => (
+                      <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border }}>
+                        <Text style={{ color: C.crimson, fontWeight: '800', width: 30 }}>{ep.number}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: C.white, fontSize: 13 }} numberOfLines={1}>{ep.title || `Episode ${ep.number}`}</Text>
+                          <Text style={{ color: C.dimmer, fontSize: 10 }} numberOfLines={1}>{ep.videoUrl}</Text>
+                        </View>
+                        <TouchableOpacity 
+                          onPress={() => setAnimeModalEpisodes(prev => prev.filter((_, idx) => idx !== i))}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons name="trash-outline" size={16} color={C.crimson} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {animeModal?._id && (
+                  <TouchableOpacity 
+                    style={[styles.addBtn, { alignSelf: 'flex-start', marginBottom: 10 }]} 
+                    onPress={() => { setAnimeModal(null); openEpisodeManager(animeModal); }}
+                  >
+                    <Ionicons name="list" size={14} color={C.white} />
+                    <Text style={styles.addBtnText}>Manage All Episodes</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               <TouchableOpacity style={[styles.modalSubmitBtn, { marginTop: 20 }]} onPress={() => handleSaveAnime(animeModal)}>
                 <Text style={styles.modalSubmitText}>Save Anime</Text>
               </TouchableOpacity>
@@ -2561,12 +2642,21 @@ export default function AdminDashboardScreen({ navigation }) {
                     />
                   </View>
                   
-                  <TextInput 
-                    style={[styles.simpleInput, { marginBottom: 10 }]} 
-                    placeholder="Video Stream URL (m3u8, mp4, etc)" placeholderTextColor={C.dimmer}
-                    onChangeText={v => setEpisodeForm(p => ({ ...p, videoUrl: v }))}
-                    value={episodeForm.videoUrl || ""}
-                  />
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                    <TextInput 
+                      style={[styles.simpleInput, { flex: 1, marginBottom: 0 }]} 
+                      placeholder="Video Stream URL (m3u8, mp4, etc)" placeholderTextColor={C.dimmer}
+                      onChangeText={v => setEpisodeForm(p => ({ ...p, videoUrl: v }))}
+                      value={episodeForm.videoUrl || ""}
+                    />
+                    <TouchableOpacity 
+                      style={[styles.addBtn, { backgroundColor: 'rgba(75,163,255,0.1)', borderColor: '#4ba3ff', height: 44, paddingHorizontal: 12 }]} 
+                      onPress={() => handleUploadFile('video')}
+                      disabled={uploadingFile}
+                    >
+                      {uploadingFile ? <ActivityIndicator size="small" color="#4ba3ff" /> : <Text style={[styles.addBtnText, { color: '#4ba3ff' }]}>Upload File</Text>}
+                    </TouchableOpacity>
+                  </View>
 
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <TouchableOpacity 
