@@ -28,7 +28,7 @@
     "expo-audio": "~1.1.1",
     "expo-av": "~16.0.8",
     "expo-blur": "~15.0.8",
-    "expo-clipboard": "^55.0.13",
+    "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
     "expo-file-system": "~19.0.22",
@@ -63,6 +63,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "docx": "^9.7.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"

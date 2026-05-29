@@ -36,29 +36,10 @@ import DotCircleLoader from "../components/DotCircleLoader";
 const SEARCH_DEBOUNCE_MS = 120;
 const SEARCH_SKELETON_DELAY_MS = 180;
 const SUGGESTION_LIMIT = 10;
-const SEARCH_CACHE_TTL_MS = 5 * 60_000;
 const PERSISTED_CACHE_PREFIX = "api_cache:";
 const SEARCH_RESULT_CACHE_PREFIX = "search_cache:";
-const searchResultCache = new Map();
 
 const normalizeSearchKey = (text) => String(text || "").trim().toLowerCase();
-
-const getCachedSearch = (key) => {
-  const hit = searchResultCache.get(key);
-  if (!hit || Date.now() - hit.ts > SEARCH_CACHE_TTL_MS) {
-    searchResultCache.delete(key);
-    return null;
-  }
-  return hit.results;
-};
-
-const setCachedSearch = (key, results) => {
-  searchResultCache.set(key, { results, ts: Date.now() });
-  if (searchResultCache.size > 80) {
-    const oldestKey = searchResultCache.keys().next().value;
-    searchResultCache.delete(oldestKey);
-  }
-};
 
 const compactAnimeItem = (item) => ({
   id: item.slug || item.id,
@@ -141,21 +122,9 @@ const getHeroHeight = (w) => {
 const _cache = {};
 const cachedGet = async (url, ttlMs = 60_000) => {
   const hit = _cache[url];
-  if (hit && Date.now() - hit.ts < ttlMs) return hit.data;
+  const fallbackTtl = Math.max(ttlMs, 10 * 60_000);
 
   const storageKey = `${PERSISTED_CACHE_PREFIX}${url}`;
-  try {
-    const raw = await AsyncStorage.getItem(storageKey);
-    if (raw) {
-      const saved = JSON.parse(raw);
-      if (saved?.ts && Date.now() - saved.ts < ttlMs) {
-        const restored = { data: saved.data };
-        _cache[url] = { data: restored, ts: saved.ts };
-        return restored;
-      }
-    }
-  } catch {}
-
   try {
     const res = await API.get(url);
     const ts = Date.now();
@@ -163,10 +132,14 @@ const cachedGet = async (url, ttlMs = 60_000) => {
     AsyncStorage.setItem(storageKey, JSON.stringify({ data: res.data, ts })).catch(() => {});
     return res;
   } catch (err) {
+    if (hit && Date.now() - hit.ts < fallbackTtl) return hit.data;
+
     const raw = await AsyncStorage.getItem(storageKey).catch(() => null);
     if (raw) {
       const saved = JSON.parse(raw);
-      if (saved?.data) return { data: saved.data };
+      if (saved?.data && saved?.ts && Date.now() - saved.ts < fallbackTtl) {
+        return { data: saved.data };
+      }
     }
     throw err;
   }
@@ -235,7 +208,8 @@ const ScheduleHomeCard = React.memo(function ScheduleHomeCard({ item, onPress, i
   let timeStr = "";
   if (item.time) {
     try {
-      timeStr = new Date(item.time.replace(/-/g, "/")).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const safeTimeStr = item.time.includes('T') ? item.time : item.time.replace(' ', 'T');
+      timeStr = new Date(safeTimeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } catch {
       timeStr = item.time;
     }
@@ -849,7 +823,6 @@ export default function HomeScreen({ navigation }) {
 
   const fetchSuggestions = useCallback(async (text) => {
     const trimmed = text.trim();
-    const cacheKey = normalizeSearchKey(trimmed);
     const requestId = ++suggestionRequestRef.current;
 
     if (suggestionAbortRef.current) {
@@ -873,15 +846,8 @@ export default function HomeScreen({ navigation }) {
     }
 
     const localResults = getLocalSuggestions(trimmed, localSuggestionPools, SUGGESTION_LIMIT);
-    setSuggestions(localResults);
-    setShowSuggestions(true);
-
-    const cached = getCachedSearch(cacheKey);
-    if (cached) {
-      setSuggestions(cached);
-      setSuggestSkeletonVisible(false);
-      return;
-    }
+    setSuggestions([]);
+    setShowSuggestions(false);
 
     const controller = new AbortController();
     suggestionAbortRef.current = controller;
@@ -899,13 +865,13 @@ export default function HomeScreen({ navigation }) {
       });
       if (suggestionRequestRef.current !== requestId) return;
       const remoteResults = dedupeAnimeItems(res.data.results || []).map(compactAnimeItem);
-      const merged = getLocalSuggestions(trimmed, [remoteResults, localResults], SUGGESTION_LIMIT);
-      setCachedSearch(cacheKey, merged);
+      const merged = getLocalSuggestions(trimmed, [remoteResults], SUGGESTION_LIMIT);
       setSuggestions(merged);
-      setShowSuggestions(true);
+      setShowSuggestions(merged.length > 0);
     } catch (err) {
       if (err?.code !== "ERR_CANCELED" && err?.name !== "CanceledError") {
         setSuggestions(localResults);
+        setShowSuggestions(localResults.length > 0);
       }
     } finally {
       if (suggestionRequestRef.current === requestId) {
@@ -933,14 +899,6 @@ export default function HomeScreen({ navigation }) {
         scrollViewRef.current.scrollTo({ y: 0, animated: true });
       }
     }
-    if (lastSearchRef.current.query === trimmed && lastSearchRef.current.page === activePage) {
-      setAnime(lastSearchRef.current.results);
-      setSearchHasNext(lastSearchRef.current.hasNextPage);
-      setSearchPage(activePage);
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
     if (searchAbortRef.current) searchAbortRef.current.abort();
     searchAbortRef.current = new AbortController();
     setSearchLoading(true);
@@ -959,14 +917,6 @@ export default function HomeScreen({ navigation }) {
     };
 
     try {
-      const cached = await AsyncStorage.getItem(storageKey);
-      if (cached) {
-        const saved = JSON.parse(cached);
-        if (saved?.ts && Date.now() - saved.ts < 10 * 60_000) {
-          applyResults(saved.data);
-        }
-      }
-
       const res = await API.get("/api/anime/search", {
         params: {
           q: trimmed,

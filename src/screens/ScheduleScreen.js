@@ -21,10 +21,11 @@ import { C } from "../theme";
 
 const { width } = Dimensions.get("window");
 
-// Helper to format/countdown to target release time
 function getCountdownText(targetTimeStr) {
   if (!targetTimeStr) return null;
-  const target = new Date(targetTimeStr.replace(/-/g, "/")); // format safe for both iOS/Android
+  // Convert "YYYY-MM-DD HH:mm:ss" to "YYYY-MM-DDTHH:mm:ss" for bulletproof native parsing
+  const safeTimeStr = targetTimeStr.includes('T') ? targetTimeStr : targetTimeStr.replace(' ', 'T');
+  const target = new Date(safeTimeStr);
   const now = new Date();
   const diffMs = target - now;
 
@@ -65,6 +66,13 @@ function ScheduleItemCard({ item, onPress }) {
   const countdown = useCountdown(item.time);
   const isReleased = item.status?.toLowerCase() === "released";
 
+  const formattedTime = useMemo(() => {
+    if (!item.time) return null;
+    const safeTimeStr = item.time.includes('T') ? item.time : item.time.replace(' ', 'T');
+    const d = new Date(safeTimeStr);
+    return isNaN(d) ? "Unknown Time" : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }, [item.time]);
+
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => onPress(item)}>
       {/* Background Poster Image */}
@@ -95,12 +103,10 @@ function ScheduleItemCard({ item, onPress }) {
           <Text style={styles.metaText}>{item.episode || "Upcoming Ep"}</Text>
         </View>
 
-        {item.time && (
+        {formattedTime && (
           <View style={styles.metaRow}>
             <Ionicons name="time-outline" size={14} color={C.dim} />
-            <Text style={styles.metaText}>
-              {new Date(item.time.replace(/-/g, "/")).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Text>
+            <Text style={styles.metaText}>{formattedTime}</Text>
           </View>
         )}
 

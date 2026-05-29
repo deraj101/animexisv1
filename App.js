@@ -38,12 +38,19 @@ import WatchlistScreen from "./src/screens/WatchlistScreen";
 import DownloadsScreen from "./src/screens/DownloadsScreen";
 import PendingApprovalScreen from "./src/screens/PendingApprovalScreen";
 import LibraryScreen from "./src/screens/LibraryScreen";
+import FloatingAIBot from "./src/components/FloatingAIBot";
 
 
 
 const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const navigationRef = createNavigationContainerRef();
+
+function getActiveRouteName(state) {
+  if (!state?.routes?.length) return null;
+  const route = state.routes[state.index || 0];
+  return getActiveRouteName(route.state) || route.name;
+}
 
 // Shared sub-screen definitions used inside every tab stack
 const SHARED_SCREENS = [
@@ -364,6 +371,11 @@ function AppContent({ linking }) {
         <NavigationContainer ref={navigationRef} linking={linking}>
           <AppNavigator />
         </NavigationContainer>
+        <FloatingAIBot
+          getCurrentRouteName={() => (
+            navigationRef.isReady() ? getActiveRouteName(navigationRef.getRootState()) : null
+          )}
+        />
       </View>
     </View>
   );

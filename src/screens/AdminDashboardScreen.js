@@ -28,6 +28,26 @@ import { C } from "../theme";
 import AppFooter from "../components/AppFooter";
 import DotCircleLoader from "../components/DotCircleLoader";
 
+const emptyAnimeForm = () => ({
+  title: "",
+  slug: "",
+  description: "",
+  image: "",
+  banner: "",
+  titleLogo: "",
+  tvdbId: "",
+  format: "TV",
+  type: "TV",
+  episodeCount: "",
+  status: "Currently Airing",
+  aired: "",
+  releaseDate: "",
+  duration: "",
+  studios: "",
+  premiered: "",
+  genres: [],
+});
+
 function SkeletonStat() {
   return (
     <View style={{ width: '48%', height: 100, backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, overflow: 'hidden' }}>
@@ -1167,10 +1187,16 @@ export default function AdminDashboardScreen({ navigation }) {
           banner: "",
           titleLogo: "",
           tvdbId: "",
-          releaseDate: res.data.released || res.data.premiered || "",
-          status: res.data.status || "Ongoing",
+          format: res.data.format || res.data.type || "TV",
+          type: res.data.type || res.data.format || "TV",
+          episodeCount: res.data.anilistEpisodeCount || res.data.episodeCount || "",
+          status: res.data.status || "Currently Airing",
+          aired: res.data.aired || res.data.released || "",
+          releaseDate: res.data.released || res.data.aired || "",
+          duration: res.data.duration || "",
+          studios: Array.isArray(res.data.studios) ? res.data.studios.map(s => s.name || s).join(", ") : (res.data.studios || ""),
+          premiered: res.data.premiered || "",
           genres: res.data.genres || [],
-          type: res.data.type || "TV"
         });
       }
     } catch (err) {
@@ -1235,11 +1261,20 @@ export default function AdminDashboardScreen({ navigation }) {
   const handleSaveAnime = async (animeData) => {
     try {
       const cfg = { headers: await getAuthHeader() };
+      const payload = {
+        ...animeData,
+        type: animeData.type || animeData.format || "TV",
+        format: animeData.format || animeData.type || "TV",
+        releaseDate: animeData.releaseDate || animeData.aired || "",
+        episodeCount: animeData.episodeCount === "" || animeData.episodeCount == null
+          ? null
+          : Number(animeData.episodeCount),
+      };
       let res;
       if (animeData._id) {
-        res = await API.put(`/api/admin/anime/${animeData._id}`, animeData, cfg);
+        res = await API.put(`/api/admin/anime/${animeData._id}`, payload, cfg);
       } else {
-        res = await API.post("/api/admin/anime", animeData, cfg);
+        res = await API.post("/api/admin/anime", payload, cfg);
       }
 
       if (res.data.success) {
@@ -1282,8 +1317,16 @@ export default function AdminDashboardScreen({ navigation }) {
     const performDelete = async () => {
       try {
         console.log('[Admin] Deleting anime:', id);
-        await API.delete(`/api/admin/anime/${encodeURIComponent(id)}`);
+        const res = await API.delete(`/api/admin/anime/${encodeURIComponent(id)}`, {
+          data: { title }
+        });
         setCustomAnimes(prev => prev.filter(a => (a._id || a.id) !== id));
+        if (res.data?.blocked) {
+          setBlockedAnimes(prev => [
+            res.data.blocked,
+            ...prev.filter(b => b.slug !== res.data.blocked.slug)
+          ]);
+        }
         if (Platform.OS === 'web') {
            window.alert(`"${title}" and all its episodes deleted.`);
         } else {
@@ -1983,10 +2026,9 @@ export default function AdminDashboardScreen({ navigation }) {
                           <Text style={{ flex: 1, color: C.white, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
                           <View style={{ flexDirection: 'row', gap: 8 }}>
                             <TouchableOpacity style={[styles.addBtn, { height: 28, paddingHorizontal: 12 }]} onPress={() => { handleImportAnime(item); setCmsSearchQuery(""); setCmsSearchResults([]); }}>
-                              <Text style={[styles.addBtnText, { fontSize: 11 }]}>Add</Text>
+                              <Text style={[styles.addBtnText, { fontSize: 11 }]}>Update</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.addBtn, { height: 28, paddingHorizontal: 12, backgroundColor: 'transparent', borderWidth: 1, borderColor: C.crimson }]} onPress={() => { handleBlockAnime(item.slug, item.title); setCmsSearchQuery(""); setCmsSearchResults([]); }}>
-                              <Ionicons name="trash-outline" size={12} color={C.crimson} style={{ marginRight: 4 }} />
                               <Text style={[styles.addBtnText, { fontSize: 11, color: C.crimson }]}>Delete</Text>
                             </TouchableOpacity>
                           </View>
@@ -2001,7 +2043,7 @@ export default function AdminDashboardScreen({ navigation }) {
                 <SectionHeader title={`Anime (${customAnimes.length})`} icon="film-outline" />
                 <TouchableOpacity 
                   style={styles.addBtn}
-                  onPress={() => setAnimeModal({ title: "", slug: "", description: "", image: "", banner: "", titleLogo: "", tvdbId: "", releaseDate: "", status: "Ongoing", genres: [], type: "TV" })}
+                  onPress={() => setAnimeModal(emptyAnimeForm())}
                 >
                   <Ionicons name="add" size={18} color={C.white} />
                   <Text style={styles.addBtnText}>Add New</Text>
@@ -2023,29 +2065,29 @@ export default function AdminDashboardScreen({ navigation }) {
                       </View>
                       <View style={styles.actInfo}>
                         <Text style={styles.actTitle} numberOfLines={1}>{anime.title}</Text>
-                        <Text style={[styles.actSub, { color: C.dimmer }]}>{anime.slug} · {anime.releaseDate} · {anime.type}</Text>
+                        <Text style={[styles.actSub, { color: C.dimmer }]}>{anime.slug} · {anime.aired || anime.releaseDate} · {anime.format || anime.type}</Text>
                       </View>
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <TouchableOpacity 
-                          style={styles.miniActionBtn}
+                          style={[styles.textActionBtn, styles.textActionBtnBlue]}
                           onPress={() => openEpisodeManager(anime)}
                           hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
                         >
-                           <Ionicons name="list" size={14} color="#4ba3ff" />
+                          <Text style={[styles.textActionBtnText, { color: "#4ba3ff" }]}>Episodes</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
-                          style={styles.miniActionBtn}
+                          style={styles.textActionBtn}
                           onPress={() => setAnimeModal(anime)}
                           hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
                         >
-                           <Ionicons name="create-outline" size={14} color={C.white} />
+                          <Text style={styles.textActionBtnText}>Edit</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
-                          style={[styles.miniActionBtn, { borderColor: 'rgba(220,20,60,0.3)' }]}
+                          style={[styles.textActionBtn, styles.textActionBtnDanger]}
                           onPress={() => handleDeleteAnime(anime._id || anime.id, anime.title)}
                           hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
                         >
-                           <Ionicons name="trash-outline" size={14} color={C.crimson} />
+                          <Text style={[styles.textActionBtnText, { color: C.crimson }]}>Delete</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -2068,10 +2110,10 @@ export default function AdminDashboardScreen({ navigation }) {
                         <Text style={styles.actSub}>Slug: {b.slug}</Text>
                       </View>
                       <TouchableOpacity 
-                        style={[styles.miniActionBtn, { borderColor: 'rgba(34,197,94,0.3)' }]}
+                        style={[styles.textActionBtn, styles.textActionBtnSuccess]}
                         onPress={() => handleUnblockAnime(b.slug)}
                       >
-                        <Ionicons name="refresh-outline" size={14} color="#22c55e" />
+                        <Text style={[styles.textActionBtnText, { color: "#22c55e" }]}>Restore</Text>
                       </TouchableOpacity>
                     </View>
                   ))
@@ -2440,67 +2482,112 @@ export default function AdminDashboardScreen({ navigation }) {
               <View style={{ height: 15 }} />
               
               <Text style={styles.inputLabel}>Banner Background URL</Text>
-              <TextInput style={styles.simpleInput} value={animeModal?.banner || ""} onChangeText={t => setAnimeModal(p => ({ ...p, banner: t }))} placeholder="High-res wide image" placeholderTextColor={C.dimmer} />
-              
-              <View style={{ marginBottom: 15 }}>
-                <Text style={styles.inputLabel}>Fanart.tv ClearLogo</Text>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <TextInput 
-                    style={[styles.simpleInput, { flex: 1, marginBottom: 0 }]} 
-                    value={animeModal?.tvdbId || ""} 
-                    onChangeText={t => setAnimeModal(p => ({ ...p, tvdbId: t }))} 
-                    placeholder="TVDB ID (e.g. 71668)" 
-                    placeholderTextColor={C.dimmer} 
-                  />
-                  <TouchableOpacity 
-                    style={[styles.addBtn, { backgroundColor: 'rgba(220,20,60,0.1)', borderColor: C.crimson }]} 
-                    onPress={handleFetchFanart}
-                    disabled={fetchingFanart}
-                  >
-                    {fetchingFanart ? <ActivityIndicator size="small" color={C.crimson} /> : <Text style={[styles.addBtnText, { color: C.crimson }]}>Fetch Logo</Text>}
-                  </TouchableOpacity>
-                </View>
-                {animeModal?.titleLogo ? (
-                  <View style={{ marginTop: 10, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 10, alignItems: 'center' }}>
-                    <Image source={{ uri: getFanartProxyUrl(animeModal.titleLogo) }} resizeMode="contain" style={{ width: 120, height: 40 }} />
-                    <TouchableOpacity onPress={() => setAnimeModal(p => ({ ...p, titleLogo: "" }))}>
-                      <Text style={{ color: C.crimson, fontSize: 10, marginTop: 5 }}>Remove Logo</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TextInput 
+                  style={[styles.simpleInput, { flex: 1, marginBottom: 0 }]} 
+                  value={animeModal?.banner || ""} 
+                  onChangeText={t => setAnimeModal(p => ({ ...p, banner: t }))} 
+                  placeholder="High-res wide image" 
+                  placeholderTextColor={C.dimmer} 
+                />
+                <TouchableOpacity 
+                  style={[styles.addBtn, { backgroundColor: 'rgba(75,163,255,0.1)', borderColor: '#4ba3ff' }]} 
+                  onPress={() => handleUploadFile('banner')}
+                  disabled={uploadingFile}
+                >
+                  {uploadingFile ? <ActivityIndicator size="small" color="#4ba3ff" /> : <Text style={[styles.addBtnText, { color: '#4ba3ff' }]}>Upload</Text>}
+                </TouchableOpacity>
               </View>
-
-              <Text style={styles.inputLabel}>Title Logo URL (Manual)</Text>
-              <TextInput 
-                style={styles.simpleInput} 
-                value={animeModal?.titleLogo || ""} 
-                onChangeText={t => setAnimeModal(p => ({ ...p, titleLogo: t }))} 
-                placeholder="https://fanart.tv/..." 
-                placeholderTextColor={C.dimmer} 
-              />
+              <View style={{ height: 15 }} />
               
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.inputLabel}>Release Date</Text>
-                  <TextInput style={styles.simpleInput} value={animeModal?.releaseDate || ""} onChangeText={t => setAnimeModal(p => ({ ...p, releaseDate: t }))} />
+                  <Text style={styles.inputLabel}>Format</Text>
+                  <TextInput 
+                    style={styles.simpleInput} 
+                    value={animeModal?.format || animeModal?.type || ""} 
+                    onChangeText={t => setAnimeModal(p => ({ ...p, format: t, type: t }))} 
+                    placeholder="TV"
+                    placeholderTextColor={C.dimmer}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.inputLabel}>Type</Text>
-                  <TextInput style={styles.simpleInput} value={animeModal?.type || ""} onChangeText={t => setAnimeModal(p => ({ ...p, type: t }))} />
+                  <Text style={styles.inputLabel}>Episodes</Text>
+                  <TextInput 
+                    style={styles.simpleInput} 
+                    value={(animeModal?.episodeCount || "").toString()} 
+                    onChangeText={t => setAnimeModal(p => ({ ...p, episodeCount: t.replace(/[^0-9]/g, "") }))} 
+                    placeholder="8"
+                    placeholderTextColor={C.dimmer}
+                    keyboardType="numeric"
+                  />
                 </View>
               </View>
 
               <Text style={styles.inputLabel}>Status</Text>
-              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                {['Ongoing', 'Completed'].map(s => (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                {['Currently Airing', 'Finished Airing', 'Not Yet Aired'].map(s => (
                   <TouchableOpacity
                     key={s}
                     style={[styles.tierOption, animeModal?.status === s && styles.tierOptionActive, { paddingVertical: 8 }]}
                     onPress={() => setAnimeModal(p => ({ ...p, status: s }))}
                   >
-                    <Text style={[styles.tierOptionText, animeModal?.status === s && styles.tierOptionTextActive]}>{s}</Text>
+                    <Text style={[styles.tierOptionText, animeModal?.status === s && styles.tierOptionTextActive]} numberOfLines={1}>{s}</Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+              <TextInput 
+                style={styles.simpleInput} 
+                value={animeModal?.status || ""} 
+                onChangeText={t => setAnimeModal(p => ({ ...p, status: t }))} 
+                placeholder="Currently Airing"
+                placeholderTextColor={C.dimmer}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Aired</Text>
+                  <TextInput 
+                    style={styles.simpleInput} 
+                    value={animeModal?.aired || animeModal?.releaseDate || ""} 
+                    onChangeText={t => setAnimeModal(p => ({ ...p, aired: t, releaseDate: t }))} 
+                    placeholder="2026"
+                    placeholderTextColor={C.dimmer}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Duration</Text>
+                  <TextInput 
+                    style={styles.simpleInput} 
+                    value={animeModal?.duration || ""} 
+                    onChangeText={t => setAnimeModal(p => ({ ...p, duration: t }))} 
+                    placeholder="25 min"
+                    placeholderTextColor={C.dimmer}
+                  />
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Studios</Text>
+                  <TextInput 
+                    style={styles.simpleInput} 
+                    value={animeModal?.studios || ""} 
+                    onChangeText={t => setAnimeModal(p => ({ ...p, studios: t }))} 
+                    placeholder="WHITE FOX"
+                    placeholderTextColor={C.dimmer}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Premiered</Text>
+                  <TextInput 
+                    style={styles.simpleInput} 
+                    value={animeModal?.premiered || ""} 
+                    onChangeText={t => setAnimeModal(p => ({ ...p, premiered: t }))} 
+                    placeholder="SPRING 2016"
+                    placeholderTextColor={C.dimmer}
+                  />
+                </View>
               </View>
 
               <Text style={styles.inputLabel}>Genres (Comma-separated)</Text>
@@ -2542,7 +2629,7 @@ export default function AdminDashboardScreen({ navigation }) {
                     />
                     <TouchableOpacity 
                       style={[styles.addBtn, { backgroundColor: 'rgba(75,163,255,0.1)', borderColor: '#4ba3ff', height: 44, paddingHorizontal: 10 }]} 
-                      onPress={() => handleUploadFile('video')}
+                      onPress={() => handleUploadFile('animeModalVideo')}
                       disabled={uploadingFile}
                     >
                       {uploadingFile ? <ActivityIndicator size="small" color="#4ba3ff" /> : <Ionicons name="cloud-upload-outline" size={18} color="#4ba3ff" />}
@@ -2651,7 +2738,7 @@ export default function AdminDashboardScreen({ navigation }) {
                     />
                     <TouchableOpacity 
                       style={[styles.addBtn, { backgroundColor: 'rgba(75,163,255,0.1)', borderColor: '#4ba3ff', height: 44, paddingHorizontal: 12 }]} 
-                      onPress={() => handleUploadFile('video')}
+                      onPress={() => handleUploadFile('episodeVideo')}
                       disabled={uploadingFile}
                     >
                       {uploadingFile ? <ActivityIndicator size="small" color="#4ba3ff" /> : <Text style={[styles.addBtnText, { color: '#4ba3ff' }]}>Upload File</Text>}
@@ -3042,6 +3129,33 @@ const styles = StyleSheet.create({
     width: 32, height: 32, borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center', alignItems: 'center',
+  },
+  textActionBtn: {
+    minHeight: 30,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textActionBtnText: {
+    color: C.white,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  textActionBtnBlue: {
+    borderColor: 'rgba(75,163,255,0.3)',
+    backgroundColor: 'rgba(75,163,255,0.08)',
+  },
+  textActionBtnDanger: {
+    borderColor: 'rgba(220,20,60,0.3)',
+    backgroundColor: 'rgba(220,20,60,0.08)',
+  },
+  textActionBtnSuccess: {
+    borderColor: 'rgba(34,197,94,0.3)',
+    backgroundColor: 'rgba(34,197,94,0.08)',
   },
   
   inputLabel: { color: C.dim, fontSize: 12, fontWeight: '700', marginBottom: 6, marginTop: 4 },

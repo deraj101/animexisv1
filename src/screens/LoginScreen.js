@@ -22,6 +22,8 @@ import DotCircleLoader from "../components/DotCircleLoader";
 const { width } = Dimensions.get("window");
 const CARD_W = Math.min(width - 40, 420);
 
+const PASSWORD_MIN_LENGTH = 8;
+
 const C = {
   bg:          "#080809",
   surface:     "#0e0e12",
@@ -35,6 +37,72 @@ const C = {
 };
 
 // ─── OTP INPUT ────────────────────────────────────────────────────────────────
+function getPasswordStrength(value) {
+  const checks = {
+    length: value.length >= PASSWORD_MIN_LENGTH,
+    upper: /[A-Z]/.test(value),
+    number: /\d/.test(value),
+    lower: /[a-z]/.test(value),
+    special: /[^A-Za-z0-9]/.test(value),
+  };
+  const score = Object.values(checks).filter(Boolean).length;
+
+  if (!value) return { label: "Password strength", level: 0, color: C.dimmer, checks };
+  if (score <= 2) return { label: "Weak password", level: 1, color: "#ef4444", checks };
+  if (score <= 4) return { label: "Medium password", level: 2, color: "#f59e0b", checks };
+  return { label: "Strong password", level: 3, color: "#22c55e", checks };
+}
+
+function validateNewPassword(value) {
+  const strength = getPasswordStrength(value);
+  if (!strength.checks.length) return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+  if (!strength.checks.upper) return "Password must include at least one uppercase letter.";
+  if (!strength.checks.number) return "Password must include at least one number.";
+  return "";
+}
+
+function PasswordStrength({ value }) {
+  const strength = getPasswordStrength(value);
+  const requirements = [
+    { label: "8+ characters", met: strength.checks.length },
+    { label: "Uppercase letter", met: strength.checks.upper },
+    { label: "Number", met: strength.checks.number },
+  ];
+
+  return (
+    <View style={styles.strengthWrap}>
+      <View style={styles.strengthHeader}>
+        <Text style={[styles.strengthLabel, { color: strength.color }]}>{strength.label}</Text>
+        <View style={styles.strengthBars}>
+          {[1, 2, 3].map((level) => (
+            <View
+              key={level}
+              style={[
+                styles.strengthBar,
+                strength.level >= level && { backgroundColor: strength.color },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+      <View style={styles.requirementRow}>
+        {requirements.map((item) => (
+          <View key={item.label} style={styles.requirementItem}>
+            <Ionicons
+              name={item.met ? "checkmark-circle" : "ellipse-outline"}
+              size={13}
+              color={item.met ? "#22c55e" : C.dimmer}
+            />
+            <Text style={[styles.requirementText, item.met && styles.requirementTextMet]}>
+              {item.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function OtpInput({ value, onChange }) {
   const inputs = useRef([]);
   const digits = value.split("").concat(Array(6).fill("")).slice(0, 6);
@@ -161,6 +229,7 @@ export default function LoginScreen({ navigation }) {
   const [otpPurpose, setOtpPurpose] = useState("login");
 
   const [email,              setEmail]              = useState("");
+  const [username,           setUsername]           = useState("");
   const [password,           setPassword]           = useState("");
   const [confirmPassword,    setConfirmPassword]    = useState("");
   const [newPassword,        setNewPassword]        = useState("");
@@ -233,7 +302,7 @@ export default function LoginScreen({ navigation }) {
   const handleSignIn = async () => {
     const trimmed = email.trim().toLowerCase();
     if (!isValidEmail(trimmed)) return setError("Enter a valid email address.");
-    if (!password || password.length < 6) return setError("Password must be at least 6 characters.");
+    if (!password) return setError("Password is required.");
 
     setLoading(true); clearError();
     try {
@@ -272,8 +341,11 @@ export default function LoginScreen({ navigation }) {
   // ── CREATE ACCOUNT ────────────────────────────────────────────────────────
   const handleRegister = async () => {
     const trimmed = email.trim().toLowerCase();
+    const cleanUsername = username.trim();
+    if (!cleanUsername || cleanUsername.length < 2) return setError("Username must be at least 2 characters.");
     if (!isValidEmail(trimmed))          return setError("Enter a valid email address.");
-    if (!password || password.length < 6) return setError("Password must be at least 6 characters.");
+    const passwordError = validateNewPassword(password);
+    if (passwordError) return setError(passwordError);
     if (password !== confirmPassword)     return setError("Passwords do not match.");
 
     // Requirement: Must accept terms before registration
@@ -283,9 +355,10 @@ export default function LoginScreen({ navigation }) {
 
   const handleActualRegister = async () => {
     const trimmed = email.trim().toLowerCase();
+    const cleanUsername = username.trim();
     setLoading(true); clearError();
     try {
-      const ok = await sendCode("/api/auth/register", { email: trimmed, password });
+      const ok = await sendCode("/api/auth/register", { email: trimmed, password, username: cleanUsername });
       if (ok) { setOtpPurpose("register"); setStep("otp"); }
     } catch (e) {
       setError(e.response?.data?.message || e.message || "Network error.");
@@ -347,7 +420,8 @@ export default function LoginScreen({ navigation }) {
 
   // ── FORGOT PASSWORD: step 3 — submit new password ─────────────────────────
   const handleResetPassword = async () => {
-    if (!newPassword || newPassword.length < 6) return setError("Password must be at least 6 characters.");
+    const passwordError = validateNewPassword(newPassword);
+    if (passwordError) return setError(passwordError);
     if (newPassword !== confirmNewPassword)       return setError("Passwords do not match.");
     setLoading(true); clearError();
     try {
@@ -382,7 +456,7 @@ export default function LoginScreen({ navigation }) {
     setLoading(true); clearError();
     try {
       if      (otpPurpose === "login")    await sendCode("/api/auth/send-otp",        { email: email.trim().toLowerCase(), password });
-      else if (otpPurpose === "register") await sendCode("/api/auth/register",         { email: email.trim().toLowerCase(), password });
+      else if (otpPurpose === "register") await sendCode("/api/auth/register",         { email: email.trim().toLowerCase(), password, username: username.trim() });
       else                                await sendCode("/api/auth/forgot-password",  { email: email.trim().toLowerCase() });
     } catch { setError("Network error. Try again."); }
     finally { setLoading(false); }
@@ -486,6 +560,20 @@ export default function LoginScreen({ navigation }) {
                   <Text style={styles.sub}>Enter your details to get started.</Text>
 
                   <View style={styles.inputWrap}>
+                    <Ionicons name="person-outline" size={18} color={C.dim} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Username"
+                      placeholderTextColor={C.dimmer}
+                      value={username}
+                      onChangeText={(v) => { setUsername(v); clearError(); }}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                      returnKeyType="next"
+                    />
+                  </View>
+
+                  <View style={styles.inputWrap}>
                     <Ionicons name="mail-outline" size={18} color={C.dim} style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
@@ -502,8 +590,9 @@ export default function LoginScreen({ navigation }) {
                   <PasswordInput
                     value={password}
                     onChange={(v) => { setPassword(v); clearError(); }}
-                    placeholder="Password (min. 6 characters)"
+                    placeholder="Password (min. 8 characters)"
                   />
+                  <PasswordStrength value={password} />
                   <PasswordInput
                     value={confirmPassword}
                     onChange={(v) => { setConfirmPassword(v); clearError(); }}
@@ -594,8 +683,9 @@ export default function LoginScreen({ navigation }) {
                   <PasswordInput
                     value={newPassword}
                     onChange={(v) => { setNewPassword(v); clearError(); }}
-                    placeholder="New password (min. 6 characters)"
+                    placeholder="New password (min. 8 characters)"
                   />
+                  <PasswordStrength value={newPassword} />
                   <PasswordInput
                     value={confirmNewPassword}
                     onChange={(v) => { setConfirmNewPassword(v); clearError(); }}
@@ -691,6 +781,16 @@ const styles = StyleSheet.create({
   },
   inputIcon: { marginRight: 10 },
   input:     { flex: 1, color: C.white, fontSize: 15, height: "100%", outlineStyle: 'none' },
+
+  strengthWrap: { marginTop: -4, marginBottom: 14 },
+  strengthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 },
+  strengthLabel: { fontSize: 12, fontWeight: "700" },
+  strengthBars: { flexDirection: "row", alignItems: "center", gap: 4 },
+  strengthBar: { width: 28, height: 4, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.08)" },
+  requirementRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  requirementItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  requirementText: { color: C.dimmer, fontSize: 11, fontWeight: "500" },
+  requirementTextMet: { color: C.dim },
 
   forgotRow:  { alignSelf: "flex-end", marginBottom: 16, marginTop: -4 },
   forgotText: { color: C.crimson, fontSize: 13, fontWeight: "500" },

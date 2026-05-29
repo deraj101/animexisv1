@@ -665,6 +665,10 @@ export default function PlayerScreen({ route, navigation }) {
 
   const buildStreamUrl = (rawUrl) => {
     if (Platform.OS === "web" && VIDEO_PROXY_ENABLED) {
+      // Do not proxy if the video is hosted on our own backend
+      if (rawUrl.includes('/uploads/')) {
+        return rawUrl;
+      }
       if (isHlsUrl(rawUrl)) {
         return `${process.env.EXPO_PUBLIC_API_URL}/api/anime/hls?url=${encodeURIComponent(rawUrl)}&token=${user?.token || ''}`;
       }

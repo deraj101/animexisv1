@@ -28,15 +28,15 @@ const C = {
 const GENRES = [
   "Action", "Adventure", "Cars", "Comedy", "Dementia", "Demons", "Drama",
   "Ecchi", "Fantasy", "Game", "Harem", "Historical", "Horror", "Isekai",
-  "Josei", "Kids", "Magic", "Martial Arts", "Mecha", "Military", "Music",
+  "Josei", "Kids", "Magic", "Martial Arts", "Mecha", "Military",
   "Mystery", "Parody", "Police", "Psychological", "Romance", "Samurai",
   "School", "Sci-Fi", "Seinen", "Shoujo", "Shoujo Ai", "Shounen",
   "Shounen Ai", "Slice of Life", "Space", "Sports", "Super Power",
   "Supernatural", "Thriller", "Vampire",
 ];
 
-const FORMATS = ["TV", "Movie", "OVA", "ONA", "Special", "Music"];
-const STATUSES = ["Ongoing", "Completed", "Upcoming"];
+const FORMATS = ["TV", "Movie", "OVA", "ONA", "Special"];
+const STATUSES = ["Ongoing", "Completed"];
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: currentYear - 2007 }, (_, i) => String(currentYear - i));
 const toFilterSlug = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, "-");
