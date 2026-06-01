@@ -43,7 +43,8 @@
       "expo-video",
       "expo-audio",
       "expo-asset",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
