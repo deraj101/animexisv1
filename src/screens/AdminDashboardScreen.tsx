@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Image,
+  Switch,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -2305,6 +2306,27 @@ export default function AdminDashboardScreen({ navigation }) {
           {/* ═══════════ SETTINGS TAB ═══════════ */}
           {activeTab === "settings" && (
             <View style={styles.body}>
+              <SectionHeader title="Authentication Settings" icon="shield-checkmark-outline" />
+              <View style={[styles.panel, { padding: 20, marginBottom: 20 }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flex: 1, paddingRight: 15 }}>
+                    <Text style={{ color: C.white, fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
+                      Require Email OTP
+                    </Text>
+                    <Text style={{ color: C.dim, fontSize: 13, lineHeight: 18 }}>
+                      When enabled, users must verify their email with a code on sign-in and registration. Disabling this allows immediate login with just a password.
+                    </Text>
+                  </View>
+                  <Switch
+                    trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(220,20,60,0.5)' }}
+                    thumbColor={!systemSettings?.otpDisabled ? C.crimson : C.dimmer}
+                    onValueChange={handleToggleGlobalOtp}
+                    value={!systemSettings?.otpDisabled}
+                    disabled={savingSettings}
+                  />
+                </View>
+              </View>
+
               <SectionHeader title="Scraper Domain Provider" icon="settings-outline" />
               <View style={[styles.panel, { padding: 20 }]}>
                 <Text style={{ color: C.dim, fontSize: 13, lineHeight: 18, marginBottom: 20 }}>
